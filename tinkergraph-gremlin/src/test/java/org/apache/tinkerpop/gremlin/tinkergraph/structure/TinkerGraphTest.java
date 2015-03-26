@@ -20,9 +20,18 @@ package org.apache.tinkerpop.gremlin.tinkergraph.structure;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.tinkerpop.gremlin.AbstractGremlinTest;
+import org.apache.tinkerpop.gremlin.groovy.jsr223.GremlinGroovyScriptEngine;
+import org.apache.tinkerpop.gremlin.process.traversal.Step;
 import org.apache.tinkerpop.gremlin.process.traversal.T;
 import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
+import org.apache.tinkerpop.gremlin.process.traversal.TraversalSource;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
+import org.apache.tinkerpop.gremlin.process.traversal.engine.StandardTraversalEngine;
+import org.apache.tinkerpop.gremlin.process.traversal.step.filter.HasStep;
+import org.apache.tinkerpop.gremlin.process.traversal.step.filter.IsStep;
+import org.apache.tinkerpop.gremlin.process.traversal.step.map.PropertiesStep;
+import org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect.GraphStep;
+import org.apache.tinkerpop.gremlin.process.traversal.step.util.HasContainer;
 import org.apache.tinkerpop.gremlin.structure.Direction;
 import org.apache.tinkerpop.gremlin.structure.Edge;
 import org.apache.tinkerpop.gremlin.structure.Graph;
@@ -35,11 +44,20 @@ import org.apache.tinkerpop.gremlin.structure.io.graphson.GraphSONMapper;
 import org.apache.tinkerpop.gremlin.structure.io.graphson.GraphSONWriter;
 import org.apache.tinkerpop.gremlin.structure.io.gryo.GryoReader;
 import org.apache.tinkerpop.gremlin.structure.io.gryo.GryoWriter;
+import org.apache.tinkerpop.gremlin.tinkergraph.process.traversal.dsl.graph.DefaultVariableGraphTraversal;
+import org.apache.tinkerpop.gremlin.tinkergraph.process.traversal.dsl.graph.TraversalVariable;
+import org.apache.tinkerpop.gremlin.tinkergraph.process.traversal.dsl.graph.TraversalVariablePosition;
+import org.apache.tinkerpop.gremlin.tinkergraph.process.traversal.dsl.graph.VariableGraphTraversal;
+import org.apache.tinkerpop.gremlin.tinkergraph.process.traversal.dsl.graph.VariableGraphTraversalSource;
 import org.apache.tinkerpop.gremlin.util.StreamFactory;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import javax.script.Bindings;
+import javax.script.CompiledScript;
+import javax.script.ScriptException;
+import javax.script.SimpleBindings;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -47,6 +65,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -690,5 +709,54 @@ public class TinkerGraphTest {
         final OutputStream os5 = new FileOutputStream(tempPath + "grateful-dead-vertices.ldjson");
         GraphSONWriter.build().create().writeVertices(os5, g.traversal().V(), Direction.BOTH);
         os.close();
+    }
+
+    @Test
+    public void shouldGrabParameters() throws Exception {
+        // compile() should cache the script to avoid future compilation
+        final GremlinGroovyScriptEngine engine = new GremlinGroovyScriptEngine();
+
+        final Graph graph = TinkerFactory.createModern();
+
+        // initially bind "g" to the variablized version of a Traversal
+        final VariableGraphTraversalSource gVar = graph.traversal(VariableGraphTraversalSource.build().engine(StandardTraversalEngine.build()));
+
+        final String script = "g.V(x).out().has('name',y).values('age').is(z).range(aa,10)";
+        final CompiledScript compilable = engine.compile(script);
+
+        // get the variablized Traversal instance.  variables are tracked within the Traversal implementation itself
+        // and are referenced by step as a key within a Map
+        try {
+            final Bindings b = new SimpleBindings();
+            b.put("g", gVar);
+            b.put("x", new TraversalVariable("x"));
+            b.put("y", new TraversalVariable("y"));
+            b.put("z", new TraversalVariable("z"));
+            b.put("aa", new TraversalVariable("aa"));
+            final VariableGraphTraversal o = (VariableGraphTraversal) compilable.eval(b);
+            System.out.println(o);
+
+            final Map<Step, List<TraversalVariablePosition>> variables = o.getStepVariables();
+
+            assertEquals(b.get("x"), variables.get(o.asAdmin().getStartStep()).get(0).getVariable());
+            assertEquals(b.get("y"), variables.get(o.asAdmin().getSteps().get(2)).get(0).getVariable());
+            assertEquals(b.get("z"), variables.get(o.asAdmin().getSteps().get(4)).get(0).getVariable());
+            assertEquals(b.get("aa"), variables.get(o.asAdmin().getSteps().get(5)).get(0).getVariable());
+        } catch (ScriptException se) {
+            se.printStackTrace();
+        }
+
+        // at this point the script is compiled so we saved that step and can re-use it with a different
+        // and standard GraphTraversalSource for the binding to "g" in the ScriptEngine:
+        final GraphTraversalSource g = graph.traversal();
+        final Bindings b = new SimpleBindings();
+        b.put("g", g);
+        b.put("x", 1);
+        b.put("y", "josh");
+        b.put("z", 32);
+        b.put("aa", 0);
+
+        final Traversal t = (Traversal) engine.eval(script, b);
+        assertEquals(32, t.next());
     }
 }

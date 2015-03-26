@@ -19,9 +19,7 @@
 package org.apache.tinkerpop.gremlin.process.traversal;
 
 /**
- * @author Marko A. Rodriguez (http://markorodriguez.com)
+ * @author Stephen Mallette (http://stephen.genoprime.com)
  */
-public enum Scope implements Scopeable {
-
-    global, local
+public interface Scopeable {
 }

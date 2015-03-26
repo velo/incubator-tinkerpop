@@ -16,12 +16,25 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.tinkerpop.gremlin.process.traversal;
+package org.apache.tinkerpop.gremlin.tinkergraph.process.traversal.dsl.graph;
 
 /**
- * @author Marko A. Rodriguez (http://markorodriguez.com)
+ * @author Stephen Mallette (http://stephen.genoprime.com)
  */
-public enum Scope implements Scopeable {
+public class TraversalVariablePosition {
+    private final TraversalVariable variable;
+    private final int position;
 
-    global, local
+    public TraversalVariablePosition(final TraversalVariable variable, final int position) {
+        this.variable = variable;
+        this.position = position;
+    }
+
+    public TraversalVariable getVariable() {
+        return variable;
+    }
+
+    public int getPosition() {
+        return position;
+    }
 }
