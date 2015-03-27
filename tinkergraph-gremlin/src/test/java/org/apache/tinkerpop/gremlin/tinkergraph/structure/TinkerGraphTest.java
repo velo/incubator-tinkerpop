@@ -759,4 +759,42 @@ public class TinkerGraphTest {
         final Traversal t = (Traversal) engine.eval(script, b);
         assertEquals(32, t.next());
     }
+
+    @Test
+    public void shouldTrackTraversalVariables() throws Exception {
+        final Graph graph = TinkerFactory.createModern();
+
+        final VariableGraphTraversalSource gVar = graph.traversal(VariableGraphTraversalSource.build().engine(StandardTraversalEngine.build()));
+        final TraversalVariable varX = new TraversalVariable("x");
+        final TraversalVariable varY = new TraversalVariable("y");
+        final TraversalVariable varZ = new TraversalVariable("z");
+        final TraversalVariable varAa = new TraversalVariable("aa");
+
+        final VariableGraphTraversal<Vertex,Object> t = gVar.V(varX).out().has("name", varY)
+                .values("age").is(varZ).range(varAa, 10);
+
+        final Map<Step, List<TraversalVariablePosition>> variables = t.getStepVariables();
+
+        assertEquals(varX, variables.get(t.asAdmin().getStartStep()).get(0).getVariable());
+        assertEquals(varY, variables.get(t.asAdmin().getSteps().get(2)).get(0).getVariable());
+        assertEquals(varZ, variables.get(t.asAdmin().getSteps().get(4)).get(0).getVariable());
+        assertEquals(varAa, variables.get(t.asAdmin().getSteps().get(5)).get(0).getVariable());
+
+        /*
+        final Map<String,Object> bindings = new HashMap<>();
+        bindings.put("x", 1);
+        bindings.put("y", "josh");
+        bindings.put("z", 32);
+        bindings.put("aa", 0);
+
+        // bind() would clone "t" with traversals applied, as possible, given statically defined steps (i.e. that
+        // don't have variables).  in this way the traversal is "prepared" as best it can be given the information
+        // that it has available.  TraversalVariables would be replaced with the values from the "bindings" Map
+        // thus making the traversal "final" or "static"
+        final Traversal t1 = t.bind(bindings);
+
+        // when next() is called on "t1", remaining strategies can be executed given that the bindings are final
+        assertEquals(32, t1.next());
+        */
+    }
 }
