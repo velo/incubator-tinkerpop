@@ -21,7 +21,6 @@ package org.apache.tinkerpop.gremlin.hadoop.process.computer.spark;
 import org.apache.tinkerpop.gremlin.process.computer.MessageCombiner;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
@@ -31,11 +30,9 @@ public interface SparkPayload<M> {
 
     public default void addMessages(final List<M> otherMessages, final MessageCombiner<M> messageCombiner) {
         if (null != messageCombiner) {
-            final Optional<M> combinedMessage = Stream.concat(this.getMessages().stream(), otherMessages.stream()).reduce(messageCombiner::combine);
-            if (combinedMessage.isPresent()) {
-                this.getMessages().clear();
-                this.getMessages().add(combinedMessage.get());
-            }
+            final M message = Stream.concat(this.getMessages().stream(),otherMessages.stream()).reduce(messageCombiner::combine).get();
+            this.getMessages().clear();
+            this.getMessages().add(message);
         } else {
             this.getMessages().addAll(otherMessages);
         }
