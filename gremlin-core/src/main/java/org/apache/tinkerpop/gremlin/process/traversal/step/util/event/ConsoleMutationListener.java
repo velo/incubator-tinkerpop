@@ -29,11 +29,11 @@ import org.apache.tinkerpop.gremlin.structure.VertexProperty;
  *
  * @author Stephen Mallette (http://stephen.genoprime.com)
  */
-public class ConsoleGraphChangedListener implements GraphChangedListener {
+public class ConsoleMutationListener implements MutationListener {
 
     private final Graph graph;
 
-    public ConsoleGraphChangedListener(final Graph graph) {
+    public ConsoleMutationListener(final Graph graph) {
         this.graph = graph;
     }
 
@@ -85,5 +85,10 @@ public class ConsoleGraphChangedListener implements GraphChangedListener {
     @Override
     public void vertexPropertyChanged(final Vertex element, final Property oldValue, final Object setValue, final Object... vertexPropertyKeyValues) {
         System.out.println("Vertex [" + element.toString() + "] property [" + oldValue + "] change to [" + setValue + "] in graph [" + graph.toString() + "]");
+    }
+
+    @Override
+    public String toString() {
+        return MutationListener.class.getSimpleName() + "[" + graph + "]";
     }
 }
