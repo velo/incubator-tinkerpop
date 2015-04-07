@@ -29,6 +29,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.tinkerpop.gremlin.hadoop.Constants;
+import org.apache.tinkerpop.gremlin.hadoop.process.computer.spark.payload.ViewIncomingPayload;
 import org.apache.tinkerpop.gremlin.hadoop.structure.HadoopConfiguration;
 import org.apache.tinkerpop.gremlin.hadoop.structure.HadoopGraph;
 import org.apache.tinkerpop.gremlin.hadoop.structure.io.VertexWritable;
@@ -42,8 +43,6 @@ import org.apache.tinkerpop.gremlin.process.computer.VertexProgram;
 import org.apache.tinkerpop.gremlin.process.computer.util.DefaultComputerResult;
 import org.apache.tinkerpop.gremlin.process.computer.util.GraphComputerHelper;
 import org.apache.tinkerpop.gremlin.process.computer.util.MapMemory;
-import org.apache.tinkerpop.gremlin.structure.Direction;
-import org.apache.tinkerpop.gremlin.structure.Edge;
 import org.apache.tinkerpop.gremlin.structure.util.StringFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -159,12 +158,14 @@ public final class SparkGraphComputer implements GraphComputer {
                         // add the project jars to the cluster
                         SparkGraphComputer.loadJars(sparkContext, hadoopConfiguration);
                         // create a message-passing friendly rdd from the hadoop input format
-                        JavaPairRDD<Object, SparkPayload<Object>> graphRDD = sparkContext.newAPIHadoopRDD(hadoopConfiguration,
+                        final JavaPairRDD<Object, VertexWritable> graphRDD = sparkContext.newAPIHadoopRDD(hadoopConfiguration,
                                 (Class<InputFormat<NullWritable, VertexWritable>>) hadoopConfiguration.getClass(Constants.GREMLIN_HADOOP_GRAPH_INPUT_FORMAT, InputFormat.class),
                                 NullWritable.class,
                                 VertexWritable.class)
-                                .mapToPair(tuple -> new Tuple2<>(tuple._2().get().id(), (SparkPayload<Object>) new SparkVertexPayload<>(tuple._2().get())))
-                                .reduceByKey((a, b) -> a); // partition the graph across the cluster  // todo: cache?
+                                .mapToPair(tuple -> new Tuple2<>(tuple._2().get().id(), new VertexWritable(tuple._2().get())))
+                                .reduceByKey((a, b) -> a) // TODO: why is this necessary?
+                                .cache(); // partition the graph across the cluster
+                        JavaPairRDD<Object, ViewIncomingPayload<Object>> viewIncomingRDD = null;
 
                         ////////////////////////////////
                         // process the vertex program //
@@ -182,7 +183,7 @@ public final class SparkGraphComputer implements GraphComputer {
                             // execute the vertex program
                             while (true) {
                                 memory.setInTask(true);
-                                graphRDD = SparkExecutor.executeVertexProgramIteration(graphRDD, memory, vertexProgramConfiguration);
+                                viewIncomingRDD = SparkExecutor.executeVertexProgramIteration(graphRDD, viewIncomingRDD, memory, vertexProgramConfiguration);
                                 memory.setInTask(false);
                                 if (this.vertexProgram.terminate(memory))
                                     break;
@@ -203,18 +204,16 @@ public final class SparkGraphComputer implements GraphComputer {
                         //////////////////////////////
                         if (!this.mapReducers.isEmpty()) {
                             // drop all edges and messages in the graphRDD as they are no longer needed for the map reduce jobs
-                            graphRDD = graphRDD.mapValues(vertex -> {
-                                vertex.getMessages().clear();
-                                vertex.asVertexPayload().getOutgoingMessages().clear();
-                                vertex.asVertexPayload().getVertex().edges(Direction.BOTH).forEachRemaining(Edge::remove);
-                                return vertex;
-                            });   // todo: cache()?
+                            final JavaPairRDD<Object, VertexWritable> mapReduceGraphRDD = SparkExecutor.prepareGraphRDDForMapReduce(graphRDD, viewIncomingRDD).cache();
+                            // TODO: boolean first = true;
                             for (final MapReduce mapReduce : this.mapReducers) {
+                                // TODO: if (first) first = false;
+                                // TODO: else graphRDD.unpersist();  // the original graphRDD is no longer needed so free up its memory
                                 // execute the map reduce job
                                 final HadoopConfiguration newApacheConfiguration = new HadoopConfiguration(apacheConfiguration);
                                 mapReduce.storeState(newApacheConfiguration);
                                 // map
-                                final JavaPairRDD mapRDD = SparkExecutor.executeMap((JavaPairRDD) graphRDD, mapReduce, newApacheConfiguration);
+                                final JavaPairRDD mapRDD = SparkExecutor.executeMap((JavaPairRDD) mapReduceGraphRDD, mapReduce, newApacheConfiguration);
                                 // combine TODO? is this really needed
                                 // reduce
                                 final JavaPairRDD reduceRDD = (mapReduce.doStage(MapReduce.Stage.REDUCE)) ? SparkExecutor.executeReduce(mapRDD, mapReduce, newApacheConfiguration) : null;
@@ -222,8 +221,6 @@ public final class SparkGraphComputer implements GraphComputer {
                                 SparkExecutor.saveMapReduceRDD(null == reduceRDD ? mapRDD : reduceRDD, mapReduce, finalMemory, hadoopConfiguration);
                             }
                         }
-                        // close the context or else bad things happen // TODO: does this happen automatically cause of the try(resource) {} block?
-                        sparkContext.close();
                         // update runtime and return the newly computed graph
                         finalMemory.setRuntime(System.currentTimeMillis() - startTime);
                         return new DefaultComputerResult(HadoopHelper.getOutputGraph(this.hadoopGraph, this.resultGraph.get(), this.persist.get()), finalMemory.asImmutable());
@@ -260,7 +257,43 @@ public final class SparkGraphComputer implements GraphComputer {
     @Override
     public Features features() {
         return new Features() {
-            @Override
+
+            public boolean supportsVertexAddition() {
+                return false;
+            }
+
+            public boolean supportsVertexRemoval() {
+                return false;
+            }
+
+            public boolean supportsVertexPropertyRemoval() {
+                return false;
+            }
+
+            public boolean supportsEdgeAddition() {
+                return false;
+            }
+
+            public boolean supportsEdgeRemoval() {
+                return false;
+            }
+
+            public boolean supportsEdgePropertyAddition() {
+                return false;
+            }
+
+            public boolean supportsEdgePropertyRemoval() {
+                return false;
+            }
+
+            public boolean supportsIsolation(final Isolation isolation) {
+                return isolation.equals(Isolation.BSP);
+            }
+
+            public boolean supportsResultGraphPersistCombination(final ResultGraph resultGraph, final Persist persist) {
+                return persist.equals(Persist.NOTHING) || resultGraph.equals(ResultGraph.NEW);
+            }
+
             public boolean supportsDirectObjects() {
                 return false;
             }

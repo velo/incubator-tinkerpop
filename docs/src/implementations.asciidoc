@@ -306,7 +306,12 @@ There are times when there may be a specific test in the suite that the implemen
 public class HadoopGraph implements Graph {
 ----
 
-The above examples show how to ignore individual tests.  It is also possible to ignore an entire test case (i.e. all the methods within the test) by setting the `method` to "*".  Also note that some of the tests in the Gremlin Test Suite are parameterized tests and require an additional level of specificity to be properly ignored.  To ignore these types of tests, examine the name template of the parameterized tests.  It is defined by a Java annotation that looks like this:
+The above examples show how to ignore individual tests.  It is also possible to:
+
+* Ignore an entire test case (i.e. all the methods within the test) by setting the `method` to "*".
+* Ignore a "base" test class such that test that extend from those classes will all be ignored.  This style of ignoring is useful for Gremlin "process" tests that have bases classes that are extended by various Gremlin flavors (e.g. groovy).
+
+Also note that some of the tests in the Gremlin Test Suite are parameterized tests and require an additional level of specificity to be properly ignored.  To ignore these types of tests, examine the name template of the parameterized tests.  It is defined by a Java annotation that looks like this:
 
 [source, java]
 @Parameterized.Parameters(name = "expect({0})")
@@ -424,192 +429,6 @@ IMPORTANT: Each graph vendor will have different mechanism by which indices and 
 
 NOTE: TinkerGraph is distributed with Gremlin Server and is therefore automatically available to it for configuration.
 
-[[neo4j-gremlin]]
-Neo4j-Gremlin
--------------
-
-[source,xml]
-----
-<dependency>
-   <groupId>org.apache.tinkerpop</groupId>
-   <artifactId>neo4j-gremlin</artifactId>
-   <version>x.y.z</version>
-</dependency>
-----
-
-link:http://neotechnology.com[Neo Technology] are the developers of the OLTP-based link:http://neo4j.org[Neo4j graph database].
-
-CAUTION: Unless under a commercial agreement with Neo Technology, Neo4j is licensed as link:http://en.wikipedia.org/wiki/Affero_General_Public_License[AGPL]. Thus, `gremlin-neo4j` (source and binaries) are licensed as such due to their dependency on the Neo4j library. Note that neither the <<gremlin-console,Gremlin Console>> nor <<gremlin-server,Gremlin Server>> distribute with the Neo4j binaries. To access the Neo4j binaries, use the `:install` command to download binaries from link:http://search.maven.org/[Maven Central Repository].
-
-[source,groovy]
-----
-gremlin> :install org.apache.tinkerpop neo4j-gremlin x.y.z
-==>loaded: [org.apache.tinkerpop, neo4j-gremlin, x.y.z]
-gremlin> :plugin use tinkerpop.neo4j
-==>tinkerpop.neo4j activated
-gremlin> g = Neo4jGraph.open('/tmp/neo4j')
-==>neo4jgraph[EmbeddedGraphDatabase [/tmp/neo4j]]
-----
-
-For those leveraging Neo4j High Availability, configure `Neo4jGraph` for "HA mode" by setting the `gremlin.neo4j.ha` flag to `true` in the `Configuration` object passed to `Neo4jGraph.open()`.  Note that when the flag is set (by default it is `false`), the `Neo4jGraph` instance expects HA configuration settings to be present.  As with embedded Neo4j, HA configuration keys should be prefixed with `gremlin.neo4j.conf`.  Please consult Neo4j documentation for more information on link:http://docs.neo4j.org/chunked/stable/ha.html[High Availability] configuration.
-
-IMPORTANT: `Neo4jGraph` supports both meta- and multi-properties (see <<_vertex_properties,vertex properties>>). However, these are implemented by making use of "hidden" Neo4j nodes. For example, when a vertex has multiple "name" properties, each property is a new node (multi-properties) which can have properties attached to it (meta-properties). As such, the underlying representation may become difficult to query directly using another graph language such as Cypher. The default setting is to disable multi- and meta-properties. However, if this feature is desired, then it can be activated via `gremlin.neo4j.metaProperties` and `gremlin.neo4j.multiProperties` configurations being set to `true`. Once the configuration is set, it can not be changed for the lifetime of the graph.
-
-TIP: To host Neo4j in Gremlin Server, the dependencies must first be "installed" or otherwise copied to the Gremlin Server path.  The automated method for doing this would be to execute `bin/gremlin-server.sh -i org.apache.tinkerpop neo4j-gremlin x.y.z`.
-
-Indices
-~~~~~~~
-
-Neo4j 2.x supports two types of indices: link:http://docs.neo4j.org/chunked/stable/query-schema-index.html[schema indices] and link:http://docs.neo4j.org/chunked/stable/auto-indexing.html[automatic indices]. Automatic indices have been around since Neo4j 1.x and automatically index an element based on a pre-defined property keys. Schema indices are new to Neo4j 2.x and leverage vertex labels to partition the index space. TinkerPop3 does not provide method interfaces for defining schemas/indices for the underlying graph system. Thus, in order to create indices, the Neo4j API is leveraged.
-
-NOTE: `Neo4jGraph` will attempt to discern which indices to use when executing a traversal of the form `g.V().has()`. The general order of checking is: schema indices, automatic indices, label grouping linear-scan iteration, full linear-scan iteration.
-
-Using Schema Indices
-^^^^^^^^^^^^^^^^^^^^
-
-The Gremlin-Console session below demonstrates schema indices. For more information, please refer to the Neo4j documentation:
-
-* Manipulating schema indices with link:http://docs.neo4j.org/chunked/stable/query-schema-index.html[Cypher].
-* Manipulating schema indices with the Neo4j link:http://docs.neo4j.org/chunked/stable/tutorials-java-embedded-new-index.html[Java API].
-
-[source,groovy]
-gremlin> graph = Neo4jGraph.open('/tmp/neo4j')
-==>neo4jgraph[EmbeddedGraphDatabase [/tmp/neo4j]]
-gremlin> graph.tx().open() // direct Neo4j access requires explicit transaction creation
-==>null
-gremlin> import org.neo4j.graphdb.*
-...
-gremlin> graph.getBaseGraph().schema().indexFor(DynamicLabel.label('person')).on('name').create()
-==>IndexDefinition[label:person, on:name]
-gremlin> graph.tx().commit()
-==>null
-gremlin> graph.addVertex(label,'person','name','marko')
-==>v[0]
-gremlin> graph.addVertex(label,'dog','name','puppy')
-==>v[1]
-gremlin> g = graph.traversal(standard())
-==>graphtraversalsource[neo4jgraph[EmbeddedGraphDatabase [/tmp/neo4j]], standard]
-gremlin> g.V().hasLabel('person').has('name','marko').values('name')
-==>marko
-
-Below demonstrates the runtime benefits of indices and demonstrates how if there is no defined schema index (only vertex labels), a linear scan of the vertex-label partition is still faster than a linear scan of all vertices.
-
-[source,groovy]
-gremlin> graph = Neo4jGraph.open('/tmp/neo4j')
-==>neo4jgraph[EmbeddedGraphDatabase [/tmp/neo4j]]
-gremlin> graph.tx().open()
-==>null
-gremlin> import org.neo4j.graphdb.*
-...
-gremlin> graph.getBaseGraph().schema().indexFor(DynamicLabel.label('artist')).on('name').create() <1>
-==>IndexDefinition[label:artist, on:name]
-gremlin> graph.tx().commit()
-==>null
-gremlin> graph.io().readGraphML('data/grateful-dead.xml')
-==>null
-gremlin> g = graph.traversal(standard())
-==>graphtraversalsource[neo4jgraph[EmbeddedGraphDatabase [/tmp/neo4j]], standard]
-gremlin> clock(1000){g.V().hasLabel('artist').has('name','Garcia').next()}  <2>
-==>0.0585639999999997
-gremlin> clock(1000){g.V().has('name','Garcia').next()} <3>
-==>0.6039889999999992
-gremlin> g.getBaseGraph().schema().getIndexes(DynamicLabel.label('artist')).iterator().next().drop() <4>
-==>null
-gremlin> g.tx().commit()
-==>null
-gremlin> clock(1000){g.V().hasLabel('artist').has('name','Garcia').next()} <5>
-==>0.26470499999999936
-gremlin> clock(1000){g.V().has('name','Garcia').next()} <6>
-==>0.6293959999999993
-
-<1> Create a schema index for all artist vertices on their name property.
-<2> Find all artists whose name is Garcia which uses the pre-defined schema index.
-<3> Find all vertices whose name is Garcia which requires a linear scan of all the data in the graph.
-<4> Drop the created index schema.
-<5> Find all artists whose name is Garcia which does a linear scan of the artist vertex-label partition.
-<6> Find all vertices whose name is Garcia which requires a linear scan of all the data in the graph.
-
-
-Using Automatic Indices
-^^^^^^^^^^^^^^^^^^^^^^^
-
-The Gremlin-Console session below demonstrates automatic indices. For more information, please refer to the Neo4j documentation:
-
-* Manipulating automatic indices with the Neo4j link:http://docs.neo4j.org/chunked/stable/auto-indexing.html[Java API].
-
-[source,groovy]
-gremlin> graph = Neo4jGraph.open('/tmp/neo4j')
-==>neo4jgraph[EmbeddedGraphDatabase [/tmp/neo4j]]
-gremlin> graph.getBaseGraph().index().getNodeAutoIndexer().startAutoIndexingProperty('name')
-==>null
-gremlin> graph.getBaseGraph().index().getNodeAutoIndexer().setEnabled(true)
-==>null
-gremlin> graph.addVertex(label,'person','name','marko')
-==>v[0]
-gremlin> graph.addVertex(label,'dog','name','puppy')
-==>v[1]
-gremlin> g = graph.traversal(standard())
-==>graphtraversalsource[neo4jgraph[EmbeddedGraphDatabase [/tmp/neo4j]], standard]
-gremlin> g.V().hasLabel('person').has('name','marko').values('name')
-==>marko
-
-WARNING: The preferred method for dealing with automatic indices in Neo4j is via `Neo4jGraph.open()` configuration as opposed to runtime updating as demonstrated above. This is because with runtime updating, index information is not propagated across Neo4j connections.
-
-Cypher
-~~~~~~
-
-image::gremlin-loves-cypher.png[width=400]
-
-NeoTechnology are the creators of the graph pattern-match query language link:http://www.neo4j.org/learn/cypher[Cypher]. It is possible to leverage Cypher from within Gremlin by using the `Neo4jGraph.cypher()` graph traversal method.
-
-[source,groovy]
-gremlin> graph = Neo4jGraph.open('/tmp/neo4j')
-==>neo4jgraph[EmbeddedGraphDatabase [/tmp/neo4j]]
-gremlin> graph.io().readGryo('data/tinkerpop-modern.kryo')
-==>null
-gremlin> graph.cypher('MATCH (a {name:"marko"}) RETURN a')
-==>[a:v[0]]
-gremlin> graph.cypher('MATCH (a {name:"marko"}) RETURN a').select('a').out('knows').values('name')
-==>vadas
-==>josh
-
-Thus, like <<match-step,`match()`>> in Gremlin, it is possible to do a declarative pattern match and then move back into imperative Gremlin.
-
-IMPORTANT: For those developers using <<gremlin-server,Gremlin Server>> against Neo4j, it is possible to do Cypher queries by simply placing the Cypher string in `g.cypher(...)` before submission to the server.
-
-Multi-Label
-~~~~~~~~~~~
-
-TinkerPop3 requires every `Element` to have a single string label (i.e. a `Vertex`, `Edge`, and `VertexProperty`). In Neo4j, a `Node` (vertex) can have an link:http://neo4j.com/docs/stable/graphdb-neo4j-labels.html[arbitrary number of labels] while a `Relationship` (edge) can have one and only one. Furthermore, in Neo4j, `Node` labels are mutable while `Relationship` labels are not. In order to handle this mismatch, three `Neo4jVertex` specific methods exist in Neo4j-Gremlin.
-
-[source,java]
-public Set<String> labels() // get all the labels of the vertex
-public void addLabel(final String label) // add a label to the vertex
-public void removeLabel(final String label) // remove a label from the vertex
-
-An example use case is presented below.
-
-[source,java]
-----
-Neo4jVertex v = (Neo4jVertex) graph.addVertex("human::animal");
-assertEquals("animal::human",v.label()) // standard Vertex.label() method (note that labels are alphabetically sorted)
-assertEquals(2, v.labels().size()) // specific Neo4jVertex.labels() method
-assertTrue(v.labels().contains("human"))
-assertTrue(v.labels().contains("animal"))
-
-v.addLabel("organism") // specific Neo4jVertex.addLabel() method
-v.removeLabel("human") // specific Neo4jVertex.removeLabel() method
-assertEquals(2, v.labels().size()) // specific Neo4jVertex.labels() method
-assertTrue(v.labels().contains("animal"))
-assertTrue(v.labels().contains("organism"))
-
-v.addLabel("organism") // add a repeat
-v.addLabel("human") // remove a label that doesn't exist
-assertEquals(2, v.labels().size()) // specific Neo4jVertex.labels() method
-assertTrue(v.labels().contains("animal"))
-assertTrue(v.labels().contains("organism"))
-----
-
 [[hadoop-gremlin]]
 Hadoop-Gremlin
 --------------
@@ -633,9 +452,9 @@ Installing Hadoop-Gremlin
 To the `.bash_profile` file, add the following environmental variable (of course, be sure the directories are respective of the local machine locations). The `HADOOP_GREMLIN_LIBS` is the location of all the Hadoop-Gremlin jars. It is possible to place developer jars into this directory for loading into the Hadoop job's classpath. Or, better yet, note that `HADOOP_GREMLIN_LIBS` can be a colon-separated (`:`) list of locations and thus will load all jars into the cluster at all provided locations.
 
 [source,shell]
-export HADOOP_GREMLIN_LIBS=/usr/local/gremlin-console/ext/hadoop-gremlin:/usr/local/gremlin-console/lib
+export HADOOP_GREMLIN_LIBS=/usr/local/gremlin-console/ext/hadoop-gremlin/lib
 
-If using <<gremlin-console,Gremlin Console>>, it is important to install the Hadoop-Gremlin plugin. Note that Hadoop-Gremlin requires a Gremlin Console restart after installing,
+If using <<gremlin-console,Gremlin Console>>, it is important to install the Hadoop-Gremlin plugin. Note that Hadoop-Gremlin requires a Gremlin Console restart after installing.
 
 [source,text]
 ----
@@ -706,7 +525,7 @@ A review of the Hadoop-Gremlin specific properties are provided in the table bel
 |gremlin.hadoop.graphInputFormat |The format that the graph input file(s) are represented in.
 |gremlin.hadoop.outputLocation |The location to write the computed HadoopGraph to.
 |gremlin.hadoop.graphOutputFormat |The format that the output file(s) should be represented in.
-|gremlin.hadoop.memoryOutputFormat |The format of any resultant GraphComputer Memory.
+|gremlin.hadoop.memoryOutputFormat |The format of any resultant GraphComputer Memory (best to always have this be `SequenceFileOutputFormat`).
 |gremlin.hadoop.jarsInDistributedCache |Whether to upload the Hadoop-Gremlin jars to Hadoop's distributed cache (necessary if jars are not on machines' classpaths).
 |=========================================================
 
@@ -753,7 +572,7 @@ A `Graph` in TinkerPop3 can support any number of `GraphComputer` implementation
 * <<giraphgraphcomputer,`GiraphGraphComputer`>>: Leverages Giraph to execute TinkerPop3 OLAP computations.
 ** The graph should fit within the total RAM of the Hadoop cluster (graph size restriction), though "out-of-core" processing is possible. Messages passing is coordinated via ZooKeeper for the in-memory graph (speedy traversals).
 * <<sparkgraphcomputer,`SparkGraphComputer`>>: Leverages Spark to execute TinkerPop3 OLAP computations.
-** The graph may fit within the total RAM of the cluster (supports larger graphs). Message passing is coordinated via Spark map/reduce operations on in-memory and disk-cached data (middle speed traversals).
+** The graph may fit within the total RAM of the cluster (supports larger graphs). Message passing is coordinated via Spark map/reduce/join operations on in-memory and disk-cached data (average speed traversals).
 * <<mapreducegraphcomputer,`MapReduceGraphComputer`>>: Leverages Hadoop's MapReduce to execute TinkerPop3 OLAP computations. (*coming soon*)
 ** The graph must fit within the total disk space of the Hadoop cluster (supports massive graphs). Message passing is coordinated via MapReduce jobs over the on-disk graph (slow traversals).
 
@@ -841,6 +660,10 @@ gremlin> g.V().out().out().values('name')
 ==>ripple
 
 CAUTION: The HadoopRemoteAcceptor (`:remote`) currently does not support `SparkGraphComputer`. As such, submitting lambda containing traversals to the Spark cluster is not possible via the Gremlin Console.
+
+The `SparkGraphComputer` algorithm leverages Spark's caching abilities to reduce the amount of data shuffled across the wire on each iteration of the <<vertexprogram,`VertexProgram`>>. When the graph is loaded as a Spark RDD (Resilient Distributed Dataset) it is immediately cached as `graphRDD`. The `graphRDD` is a distributed adjacency list which encodes the vertex, its properties, and all its incident edges. On the first iteration, each vertex (in parallel) is passed through `VertexProgram.execute()`. This yields an output of the vertex's mutated state (i.e. updated compute keys -- `propertyX`) and its outgoing messages. This `viewOutgoingRDD` is then reduced to `viewIncomingRDD` where the outgoing messages are sent to their respective vertices. If a `MessageCombiner` exists for the vertex program, then messages are aggregated locally and globally to ultimately yield one incoming message for the vertex. This reduce sequence is the "message pass." If the vertex program does not terminate on this iteration, then the `viewIncomingRDD` is joined with the cached `graphRDD` and the process continues. When there are no more iterations, there is a final join and the resultant RDD is stripped of its edges and messages. This `mapReduceRDD` is cached and is processed by each <<mapreduce,`MapReduce`>> job in the <<graphcomputer,`GraphComputer`>> computation.
+
+image::spark-algorithm.png[width=775]
 
 [[mapreducegraphcomputer]]
 MapReduceGraphComputer

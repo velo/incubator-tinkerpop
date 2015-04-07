@@ -25,9 +25,10 @@ limitations under the License.
     </parent>
     <groupId>org.apache.tinkerpop</groupId>
     <artifactId>tinkerpop</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.0.0.M8</version>
     <packaging>pom</packaging>
-    <name>Apache TinkerPop: A Graph Computing Framework</name>
+    <name>Apache TinkerPop</name>
+    <description>A Graph Computing Framework</description>
     <url>http://tinkerpop.incubator.apache.org/</url>
     <mailingLists>
         <mailingList>
@@ -76,12 +77,10 @@ limitations under the License.
     <modules>
         <module>gremlin-shaded</module>
         <module>gremlin-core</module>
-        <module>gremlin-algorithm</module>
         <module>gremlin-test</module>
         <module>gremlin-groovy</module>
         <module>gremlin-groovy-test</module>
         <module>tinkergraph-gremlin</module>
-        <module>neo4j-gremlin</module>
         <module>hadoop-gremlin</module>
         <module>gremlin-driver</module>
         <module>gremlin-console</module>
@@ -138,7 +137,7 @@ limitations under the License.
                             <rules>
                                 <DependencyConvergence/>
                                 <requireJavaVersion>
-                                    <version>[1.8,)</version>
+                                    <version>[1.8.0-40,)</version>
                                 </requireJavaVersion>
                             </rules>
                         </configuration>
@@ -245,6 +244,7 @@ limitations under the License.
                         <exclude>**/src/main/resources/META-INF/services/**</exclude>
                         <exclude>**/src/main/ext/**</exclude>
                         <exclude>**/_bsp/**</exclude>
+                        <exclude>DEPENDENCIES</exclude>
                     </excludes>
                     <licenses>
                         <license implementation="org.apache.rat.analysis.license.ApacheSoftwareLicense20"/>
@@ -532,6 +532,11 @@ limitations under the License.
                         <groupId>org.slf4j</groupId>
                         <artifactId>slf4j-api</artifactId>
                     </exclusion>
+                    <!-- LGPL licensed - users will need to install this jar manually -->
+                    <exclusion>
+                        <groupId>org.acplt</groupId>
+                        <artifactId>oncrpc</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
             <dependency>
@@ -561,7 +566,7 @@ limitations under the License.
             </activation>
 
             <properties>
-                <asciidoc.source.dir>${project.basedir}/docs</asciidoc.source.dir>
+                <asciidoc.source.dir>${project.basedir}/target/postprocess-asciidoc</asciidoc.source.dir>
                 <asciidoc.input.dir>${project.basedir}/target/doc-source</asciidoc.input.dir>
                 <asciidoctor.style.dir>${asciidoc.input.dir}/stylesheets</asciidoctor.style.dir>
                 <htmlsingle.output.dir>${project.basedir}/target/docs/htmlsingle</htmlsingle.output.dir>
@@ -683,26 +688,6 @@ limitations under the License.
                             </execution>
                         </executions>
                     </plugin>
-                    <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>wagon-maven-plugin</artifactId>
-                        <inherited>false</inherited>
-                        <executions>
-                            <execution>
-                                <id>upload-asciidocs-to-s3-versioned</id>
-                                <phase>deploy</phase>
-                                <goals>
-                                    <goal>upload</goal>
-                                </goals>
-                                <configuration>
-                                    <fromDir>${htmlsingle.output.dir}</fromDir>
-                                    <serverId>tinkerpop.s3</serverId>
-                                    <!-- your ~/.m2/settings.xml must match -->
-                                    <url>s3://www.tinkerpop.com/docs/${project.version}</url>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
                 </plugins>
             </build>
         </profile>
@@ -754,7 +739,7 @@ limitations under the License.
                                     <destDir>full</destDir>
                                     <additionalparam>-Xdoclint:none</additionalparam>
                                     <sourcepath>
-                                        hadoop-gremlin/src/main/java:gremlin-algorithm/src/main/java:gremlin-core/src/main/java:gremlin-driver/src/main/java:gremlin-groovy/src/main/java:gremlin-server/src/main/java:gremlin-test/src/main/java:neo4j-gremlin/src/main/java:tinkergraph-gremlin/src/main/java
+                                        hadoop-gremlin/src/main/java:gremlin-core/src/main/java:gremlin-driver/src/main/java:gremlin-groovy/src/main/java:gremlin-server/src/main/java:gremlin-test/src/main/java:tinkergraph-gremlin/src/main/java
                                     </sourcepath>
                                     <quiet>true</quiet>
                                     <additionalDependencies>
@@ -808,27 +793,6 @@ limitations under the License.
                                             <version>1.2.1</version>
                                         </additionalDependency>
                                     </additionalDependencies>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>wagon-maven-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>upload-javadoc-to-s3-versioned</id>
-                                <phase>deploy</phase>
-                                <goals>
-                                    <goal>upload</goal>
-                                </goals>
-                                <inherited>false</inherited>
-                                <configuration>
-                                    <fromDir>${javadoc.dir}</fromDir>
-                                    <serverId>tinkerpop.s3</serverId>
-                                    <!-- your ~/.m2/settings.xml must match -->
-                                    <!-- <optimize>true</optimize> --> <!-- not supported by the S3 wagon -->
-                                    <url>s3://www.tinkerpop.com/javadocs/${project.version}</url>
                                 </configuration>
                             </execution>
                         </executions>
@@ -895,73 +859,6 @@ limitations under the License.
                                 </goals>
                                 <configuration>
                                     <executable>${basedir}/bin/clean-grapes.sh</executable>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-
-        <profile>
-            <id>archives</id>
-            <activation>
-                <activeByDefault>false</activeByDefault>
-                <property>
-                    <name>archives</name>
-                </property>
-            </activation>
-
-            <properties>
-                <server.artifact>gremlin-server/target/gremlin-server-${project.version}-distribution.zip
-                </server.artifact>
-                <console.artifact>gremlin-console/target/gremlin-console-${project.version}-distribution.zip
-                </console.artifact>
-            </properties>
-
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-deploy-plugin</artifactId>
-                        <configuration>
-                            <skip>true</skip>
-                        </configuration>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>wagon-maven-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>upload-gremlin-server-to-s3-versioned</id>
-                                <phase>deploy</phase>
-                                <goals>
-                                    <goal>upload-single</goal>
-                                </goals>
-                                <inherited>false</inherited>
-                                <configuration>
-                                    <fromFile>${server.artifact}</fromFile>
-                                    <toFile>gremlin-server-${project.version}.zip</toFile>
-                                    <serverId>tinkerpop.s3</serverId>
-                                    <!-- your ~/.m2/settings.xml must match -->
-                                    <!-- <optimize>true</optimize> --> <!-- not supported by the S3 wagon -->
-                                    <url>s3://www.tinkerpop.com/downloads/${project.version}</url>
-                                </configuration>
-                            </execution>
-                            <execution>
-                                <id>upload-gremlin-console-to-s3-versioned</id>
-                                <phase>deploy</phase>
-                                <goals>
-                                    <goal>upload-single</goal>
-                                </goals>
-                                <inherited>false</inherited>
-                                <configuration>
-                                    <fromFile>${console.artifact}</fromFile>
-                                    <toFile>gremlin-console-${project.version}.zip</toFile>
-                                    <serverId>tinkerpop.s3</serverId>
-                                    <!-- your ~/.m2/settings.xml must match -->
-                                    <!-- <optimize>true</optimize> --> <!-- not supported by the S3 wagon -->
-                                    <url>s3://www.tinkerpop.com/downloads/${project.version}</url>
                                 </configuration>
                             </execution>
                         </executions>

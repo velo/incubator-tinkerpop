@@ -21,10 +21,10 @@ limitations under the License.
     <parent>
         <groupId>org.apache.tinkerpop</groupId>
         <artifactId>tinkerpop</artifactId>
-        <version>3.0.0-SNAPSHOT</version>
+        <version>3.0.0.M8</version>
     </parent>
     <artifactId>gremlin-server</artifactId>
-    <name>Gremlin Server: Gremlin on the Server</name>
+    <name>Apache TinkerPop :: Gremlin Server</name>
     <dependencies>
         <dependency>
             <groupId>org.apache.tinkerpop</groupId>
@@ -65,18 +65,6 @@ limitations under the License.
             <artifactId>gremlin-test</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.tinkerpop</groupId>
-            <artifactId>neo4j-gremlin</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>ch.qos.logback</groupId>
-                    <artifactId>logback-classic</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>com.carrotsearch</groupId>
@@ -126,7 +114,7 @@ limitations under the License.
                     </execution>
                 </executions>
                 <configuration>
-                    <attach>false</attach>
+                    <attach>true</attach>
                     <descriptors>
                         <descriptor>src/assembly/standalone.xml</descriptor>
                         <descriptor>src/assembly/distribution.xml</descriptor>
@@ -137,7 +125,7 @@ limitations under the License.
                     <tarLongFileMode>warn</tarLongFileMode>
                     <archive>
                         <manifest>
-                            <mainClass>org.apache.tinkerpop.gremlin.server.GremlinServer</mainClass>
+                            <mainClass>org.apache.tinkerpop.gremlin.console.Console</mainClass>
                         </manifest>
                     </archive>
                 </configuration>

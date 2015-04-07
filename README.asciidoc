@@ -23,23 +23,22 @@ Documentation
 ~~~~~~~~~~~~~
 
 * link:http://tinkerpop.incubator.apache.org/[homepage]
-* link:http://tinkerpop.incubator.apache.org/docs/3.0.0-SNAPSHOT/[user documentation]
-* link:http://tinkerpop.incubator.apache.org/javadocs/3.0.0-SNAPSHOT/core/[core javadoc]
-* link:http://tinkerpop.incubator.apache.org/javadocs/3.0.0-SNAPSHOT/full/[full javadoc]
+* link:http://tinkerpop.incubator.apache.org/docs/3.0.0.M8/[user documentation]
+* link:http://tinkerpop.incubator.apache.org/javadocs/3.0.0.M8/core/[core javadoc]
+* link:http://tinkerpop.incubator.apache.org/javadocs/3.0.0.M8/full/[full javadoc]
 
 Building and Testing
 ~~~~~~~~~~~~~~~~~~~~
 
 * Build Project: `mvn clean install`
 ** Specify specific tests in a TinkerPop Suite to run: `mvn test -Dgremlin.tests={test class 1, test class 2...}` - note that including a specific test may require its inner class implementation (e.g. `org.apache.tinkerpop.gremlin....UnionTest$ComputerTest`)
-** Fast-build (does not run `neo4j-gremlin` tests - use with caution): `mvn clean install -DfeelingLucky`
 ** Clean the `.groovy/grapes/org.apache.tinkerpop` directory on build: `mvn clean install -DcleanGrapes`
 * Regenerate test data (only necessary given changes to IO classes): `mvn clean install -Dio` from `tinkergraph-gremlin` directory
+* Check license headers are present: `mvn apache-rat:check`
 * Build AsciiDocs: `docs/preprocessor/preprocess.sh && mvn process-resources -Dasciidoc`
 * Build JavaDocs: `mvn process-resources -Djavadoc`
 * Check for Apache License headers: `mvn apache-rat:check`
 * Deploy JavaDocs/AsciiDocs: `bin/publish-docs.sh svn-username`
-* Deploy Zip Archives: `mvn deploy -Darchives`
 * Integration Tests: `mvn verify -DskipIntegrationTests=false`
 * Performance Tests: `mvn verify -DskipPerformanceTests=false`
 * Gatling Load Tests: `mvn test -Pgatling -Dhost={hostname}`
@@ -72,23 +71,18 @@ gremlin>
 Release Process
 ~~~~~~~~~~~~~~~
 
-. `mvn apache-rat:check` - ensure license headers are present
 . `mvn clean install`
 .. `mvn verify -DskipIntegrationTests=false`
 .. `mvn verify -DskipPerformanceTests=false`
-. Update `CHANGELOG.asciidoc` with release date.
-. `bin/bump.sh "version"` to update project files to reference the non-SNAPSHOT version.
+. Update `CHANGELOG.asciidoc` with release date
+. `bin/bump.sh "version"` to update project files to reference the non-SNAPSHOT version
 . `git diff` and review the updated files (expect all `pom.xml` files and this README)
 . `git commit -a -m "TinkerPop x.y.z release"` and `git push`
 . `git tag -a -m "TinkerPop x.y.z release" x.y.z` and `git push --tags`
-. `bin/publish-docs.sh`
-. `mvn clean install -Dasciidoc -Djavadoc -Dmaven.test.skip=true` - generate distributions for the release version with documentation included
-. `mvn deploy -Psonatype-oss-release -Dmaven.test.skip=true`
-. Log into link:https://oss.sonatype.org/[SonaType], close and then release the release.
-. `mvn deploy -Darchives -Dmaven.test.skip=true`
-. Update download links on home page.
-.. `s3cmd --acl-public put index.html s3://www.tinkerpop.com/`
-. Email gremlin-users mailing list and tweet.
+. `bin/publish-docs.sh <username>`
+. `mvn deploy -Papache-release -DcreateChecksum=true -Dmaven.test.skip=true`- deploy signed artifacts with checksums to Apache Nexus for release voting
+. Close the staging repository
+. Submit for `[VOTE]` at `general@incubator.apache.org`
 
 Issue Tracker Conventions
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -104,4 +98,4 @@ TinkerPop3 uses Apache JIRA as its link:https://issues.apache.org/jira/browse/TI
 ** If the issue is a `bug` then the "priority" should be `critical`.
 ** If the issue is an `improvement` then the "priority should be `major`.
 * Issues are not assigned "labels".
-* Until there is an official release "affected version" should be left empty.
+* Until there is an official release "affected versionq" should be left empty.
