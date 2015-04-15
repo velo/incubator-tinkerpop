@@ -23,6 +23,7 @@ import org.apache.tinkerpop.gremlin.GraphManager;
 import org.apache.tinkerpop.gremlin.groovy.loaders.SugarLoader;
 import org.apache.tinkerpop.gremlin.groovy.util.SugarTestHelper;
 import org.apache.tinkerpop.gremlin.process.traversal.CoreTraversalTest;
+import org.apache.tinkerpop.gremlin.process.traversal.GroovyTraversalSideEffectsTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.branch.GroovyBranchTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.branch.GroovyChooseTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.branch.GroovyLocalTest;
@@ -32,6 +33,7 @@ import org.apache.tinkerpop.gremlin.process.traversal.step.filter.GroovyAndTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.GroovyCoinTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.GroovyCyclicPathTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.GroovyDedupTest;
+import org.apache.tinkerpop.gremlin.process.traversal.step.filter.GroovyDropTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.GroovyExceptTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.GroovyFilterTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.GroovyHasNotTest;
@@ -45,10 +47,8 @@ import org.apache.tinkerpop.gremlin.process.traversal.step.filter.GroovySimplePa
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.GroovyWhereTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.GroovyAddEdgeTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.GroovyAddVertexTest;
-import org.apache.tinkerpop.gremlin.process.traversal.step.map.GroovyBackTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.GroovyCoalesceTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.GroovyCountTest;
-import org.apache.tinkerpop.gremlin.process.traversal.step.filter.GroovyDropTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.GroovyFoldTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.GroovyMapTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.GroovyMatchTest;
@@ -74,11 +74,17 @@ import org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect.GroovySide
 import org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect.GroovyStoreTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect.GroovySubgraphTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect.GroovyTreeTest;
+import org.apache.tinkerpop.gremlin.structure.Graph;
+import org.apache.tinkerpop.gremlin.structure.StructureStandardSuite;
 import org.junit.runners.model.InitializationError;
 import org.junit.runners.model.RunnerBuilder;
 
 /**
- * The test suite for the Groovy implementation of Gremlin Process.
+ * The {@code GroovyProcessStandardSuite} is a JUnit test runner that executes the Gremlin Test Suite over a
+ * {@link Graph} implementation.  This test suite covers traversal operations and should be implemented by vendors
+ * to validate that their implementations are compliant with the Groovy flavor of the Gremlin language.
+ * <br/>
+ * For more information on the usage of this suite, please see {@link StructureStandardSuite}.
  *
  * @author Stephen Mallette (http://stephen.genoprime.com)
  */
@@ -88,7 +94,7 @@ public class GroovyProcessStandardSuite extends ProcessStandardSuite {
      * This list of tests in the suite that will be executed.  Gremlin developers should add to this list
      * as needed to enforce tests upon implementations.
      */
-    private static final Class<?>[] testsToExecute = new Class<?>[]{
+    private static final Class<?>[] allTests = new Class<?>[]{
             // branch
             GroovyBranchTest.StandardTraversals.class,
             GroovyChooseTest.StandardTraversals.class,
@@ -115,7 +121,6 @@ public class GroovyProcessStandardSuite extends ProcessStandardSuite {
             // map
             GroovyAddEdgeTest.StandardTraversals.class,
             GroovyAddVertexTest.StandardTraversals.class,
-            GroovyBackTest.StandardTraversals.class,
             GroovyCoalesceTest.StandardTraversals.class,
             GroovyCountTest.StandardTraversals.class,
             GroovyFoldTest.StandardTraversals.class,
@@ -145,13 +150,15 @@ public class GroovyProcessStandardSuite extends ProcessStandardSuite {
             GroovySubgraphTest.StandardTraversals.class,
             GroovyTreeTest.StandardTraversals.class,
 
+            // util
+            GroovyTraversalSideEffectsTest.StandardTraversals.class,
+
             // compliance
             CoreTraversalTest.class,
     };
 
-
     public GroovyProcessStandardSuite(final Class<?> klass, final RunnerBuilder builder) throws InitializationError {
-        super(klass, builder, testsToExecute, testsToExecute, true);
+        super(klass, builder, allTests);
     }
 
     @Override

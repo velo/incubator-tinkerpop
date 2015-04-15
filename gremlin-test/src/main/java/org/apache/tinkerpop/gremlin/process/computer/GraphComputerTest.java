@@ -468,7 +468,7 @@ public class GraphComputerTest extends AbstractGremlinProcessTest {
         @Override
         public void execute(final Vertex vertex, final Messenger<Object> messenger, final Memory memory) {
             try {
-                vertex.property("blah", "blah");
+                vertex.property(VertexProperty.Cardinality.single, "blah", "blah");
                 fail("Should throw an IllegalArgumentException");
             } catch (final IllegalArgumentException e) {
                 assertEquals(GraphComputer.Exceptions.providedKeyIsNotAnElementComputeKey("blah").getMessage(), e.getMessage());
@@ -478,7 +478,7 @@ public class GraphComputerTest extends AbstractGremlinProcessTest {
 
             memory.incr("a", 1);
             if (memory.isInitialIteration()) {
-                vertex.property("nameLengthCounter", vertex.<String>value("name").length());
+                vertex.property(VertexProperty.Cardinality.single, "nameLengthCounter", vertex.<String>value("name").length());
                 memory.incr("b", vertex.<String>value("name").length());
             } else {
                 vertex.property(VertexProperty.Cardinality.single, "nameLengthCounter", vertex.<String>value("name").length() + vertex.<Integer>value("nameLengthCounter"));
@@ -644,7 +644,11 @@ public class GraphComputerTest extends AbstractGremlinProcessTest {
 
         @Override
         public void reduce(NullObject key, Iterator<Integer> values, ReduceEmitter<NullObject, Integer> emitter) {
-            emitter.emit(StreamFactory.stream(values).mapToInt(i -> i).sum());
+            int sum = 0;
+            while(values.hasNext()) {
+                sum = sum + values.next();
+            }
+            emitter.emit(sum);
         }
 
         @Override
@@ -726,12 +730,16 @@ public class GraphComputerTest extends AbstractGremlinProcessTest {
         }
 
         @Override
-        public void reduce(NullObject key, Iterator<Integer> values, ReduceEmitter<NullObject, Integer> emitter) {
-            emitter.emit(StreamFactory.stream(values).mapToInt(i -> i).sum());
+        public void reduce(final NullObject key, final Iterator<Integer> values, final ReduceEmitter<NullObject, Integer> emitter) {
+            int sum = 0;
+            while(values.hasNext()) {
+                sum = sum + values.next();
+            }
+            emitter.emit(sum);
         }
 
         @Override
-        public Integer generateFinalResult(Iterator<KeyValue<NullObject, Integer>> keyValues) {
+        public Integer generateFinalResult(final Iterator<KeyValue<NullObject, Integer>> keyValues) {
             return keyValues.next().getValue();
         }
 
@@ -750,7 +758,7 @@ public class GraphComputerTest extends AbstractGremlinProcessTest {
 
         @Override
         public void map(final Vertex vertex, final MapEmitter<Integer, Integer> emitter) {
-            vertex.<Integer>property("age").ifPresent(age -> emitter.emit(age,age));
+            vertex.<Integer>property("age").ifPresent(age -> emitter.emit(age, age));
         }
 
         @Override

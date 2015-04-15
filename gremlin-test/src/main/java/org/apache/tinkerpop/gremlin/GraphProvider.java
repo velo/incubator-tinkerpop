@@ -37,6 +37,7 @@ import org.apache.tinkerpop.gremlin.structure.Graph;
 import org.apache.tinkerpop.gremlin.structure.Property;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.apache.tinkerpop.gremlin.structure.VertexProperty;
+import org.apache.tinkerpop.gremlin.structure.util.Attachable;
 import org.apache.tinkerpop.gremlin.structure.util.GraphFactory;
 
 import java.util.Collections;
@@ -104,17 +105,17 @@ public interface GraphProvider {
 
     /**
      * Creates a new {@link org.apache.tinkerpop.gremlin.structure.Graph} instance using the default
-     * {@link org.apache.commons.configuration.Configuration} from {@link #standardGraphConfiguration(Class, String)}.
+     * {@link org.apache.commons.configuration.Configuration} from {@link #standardGraphConfiguration(Class, String, LoadGraphWith.GraphData)}.
      * The default implementation converts the passes the
      */
-    default public Graph standardTestGraph(final Class<?> test, final String testMethodName) {
-        return GraphFactory.open(standardGraphConfiguration(test, testMethodName));
+    default public Graph standardTestGraph(final Class<?> test, final String testMethodName, final LoadGraphWith.GraphData loadGraphWith) {
+        return GraphFactory.open(standardGraphConfiguration(test, testMethodName, loadGraphWith));
     }
 
     /**
      * Creates a new {@link org.apache.tinkerpop.gremlin.structure.Graph} instance from the Configuration object using
      * {@link org.apache.tinkerpop.gremlin.structure.util.GraphFactory}. The assumption here is that the {@code Configuration}
-     * has been created by one of the {@link #newGraphConfiguration(String, Class, String)} methods and has therefore
+     * has been created by one of the {@link #newGraphConfiguration(String, Class, String, LoadGraphWith.GraphData)} methods and has therefore
      * already been modified by the implementation as necessary for {@link Graph} creation.
      */
     default public Graph openTestGraph(final Configuration config) {
@@ -127,8 +128,8 @@ public interface GraphProvider {
      * should always return a configuration instance that generates the same {@link org.apache.tinkerpop.gremlin.structure.Graph} from the
      * {@link org.apache.tinkerpop.gremlin.structure.util.GraphFactory}.
      */
-    default public Configuration standardGraphConfiguration(final Class<?> test, final String testMethodName) {
-        return newGraphConfiguration("standard", test, testMethodName, Collections.<String, Object>emptyMap());
+    default public Configuration standardGraphConfiguration(final Class<?> test, final String testMethodName, final LoadGraphWith.GraphData loadGraphWith) {
+        return newGraphConfiguration("standard", test, testMethodName, Collections.<String, Object>emptyMap(), loadGraphWith);
     }
 
     /**
@@ -154,9 +155,11 @@ public interface GraphProvider {
 
     /**
      * Converts an identifier from a test to an identifier accepted by the Graph instance.  Test that try to
-     * utilize an Element identifier will pass it to this method before usage.
+     * utilize an Element identifier will pass it to this method before usage.  This method should be sure to
+     * consistent in the return value such that calling it with "x" should always return the same transformed
+     * value.
      */
-    default public Object convertId(final Object id) {
+    default public Object convertId(final Object id, final Class<? extends Element> c) {
         return id;
     }
 
@@ -177,11 +180,13 @@ public interface GraphProvider {
      * @param test                   the test class
      * @param testMethodName         the name of the test
      * @param configurationOverrides settings to override defaults with.
+     * @param loadGraphWith  the data set to load and will be null if no data is to be loaded
      */
     public Configuration newGraphConfiguration(final String graphName,
                                                final Class<?> test,
                                                final String testMethodName,
-                                               final Map<String, Object> configurationOverrides);
+                                               final Map<String, Object> configurationOverrides,
+                                               final LoadGraphWith.GraphData loadGraphWith);
 
     /**
      * When implementing this method ensure that a test suite can override any settings EXCEPT the
@@ -191,11 +196,13 @@ public interface GraphProvider {
      * @param graphName      a unique test graph name
      * @param test           the test class
      * @param testMethodName the name of the test
+     * @param loadGraphWith  the data set to load and will be null if no data is to be loaded
      */
     default public Configuration newGraphConfiguration(final String graphName,
                                                        final Class<?> test,
-                                                       final String testMethodName) {
-        return newGraphConfiguration(graphName, test, testMethodName, new HashMap<>());
+                                                       final String testMethodName,
+                                                       final LoadGraphWith.GraphData loadGraphWith) {
+        return newGraphConfiguration(graphName, test, testMethodName, new HashMap<>(), loadGraphWith);
     }
 
     /**
@@ -212,25 +219,6 @@ public interface GraphProvider {
      * @param testName      the name of the test method being executed
      */
     public void loadGraphData(final Graph graph, final LoadGraphWith loadGraphWith, final Class testClass, final String testName);
-
-    /**
-     * Converts the GraphSON representation of an identifier to the implementation's representation of an identifier.
-     * When serializing a mapper identifier type to GraphSON an implementer will typically specify a mapper serializer
-     * in {@link org.apache.tinkerpop.gremlin.structure.Graph.Io}.  That will serialize the identifier to a GraphSON representation.
-     * When the GraphSON is deserialized, the identifier is written to an
-     * {@link org.apache.tinkerpop.gremlin.structure.util.detached.Attachable} object where it is passed to a user supplied
-     * conversion {@link java.util.function.Function} that ultimately processes it.  It is in this conversion process
-     * that vendor specific identifier conversion would occur (if desired).  This method mimics that conversion by
-     * providing the mechanism that a test can use to do the conversion.
-     *
-     * @param clazz The {@link Element} class that represents the identifier.
-     * @param id    The identifier to convert.
-     * @param <ID>  The type of the identifier.
-     * @return The reconstituted identifier.
-     */
-    public default <ID> ID reconstituteGraphSONIdentifier(final Class<? extends Element> clazz, final Object id) {
-        return (ID) id;
-    }
 
     /**
      * Get the set of concrete implementations of certain classes and interfaces utilized by the test suite. This

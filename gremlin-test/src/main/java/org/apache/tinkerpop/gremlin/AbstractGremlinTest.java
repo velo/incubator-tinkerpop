@@ -21,10 +21,12 @@ package org.apache.tinkerpop.gremlin;
 import org.apache.commons.configuration.Configuration;
 import org.apache.tinkerpop.gremlin.process.computer.GraphComputer;
 import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
+import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.apache.tinkerpop.gremlin.structure.Edge;
 import org.apache.tinkerpop.gremlin.structure.Graph;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
+import org.apache.tinkerpop.gremlin.structure.VertexProperty;
 import org.apache.tinkerpop.gremlin.util.iterator.IteratorUtils;
 import org.junit.After;
 import org.junit.Before;
@@ -65,21 +67,21 @@ public abstract class AbstractGremlinTest {
 
     @Before
     public void setup() throws Exception {
+        final Method testMethod = this.getClass().getMethod(cleanMethodName(name.getMethodName()));
+        final LoadGraphWith[] loadGraphWiths = testMethod.getAnnotationsByType(LoadGraphWith.class);
+        final LoadGraphWith loadGraphWith = loadGraphWiths.length == 0 ? null : loadGraphWiths[0];
+        final LoadGraphWith.GraphData loadGraphWithData = null == loadGraphWith ? null : loadGraphWith.value();
+
         graphProvider = GraphManager.getGraphProvider();
-        config = graphProvider.standardGraphConfiguration(this.getClass(), name.getMethodName());
+        config = graphProvider.standardGraphConfiguration(this.getClass(), name.getMethodName(), loadGraphWithData);
 
         // this should clear state from a previously unfinished test. since the graph does not yet exist,
         // persisted graphs will likely just have their directories removed
         graphProvider.clear(config);
 
-        // not sure how the strategy can ever be null, but it seems to happen in the performance tests
         graph = graphProvider.openTestGraph(config);
         g = graphProvider.traversal(graph);
         graphComputerClass = g.getGraphComputer().isPresent() ? Optional.of(g.getGraphComputer().get().getClass()) : Optional.empty();
-
-        final Method testMethod = this.getClass().getMethod(cleanMethodName(name.getMethodName()));
-
-        final LoadGraphWith[] loadGraphWiths = testMethod.getAnnotationsByType(LoadGraphWith.class);
 
         // get feature requirements on the test method and add them to the list of ones to check
         final FeatureRequirement[] featureRequirement = testMethod.getAnnotationsByType(FeatureRequirement.class);
@@ -110,7 +112,6 @@ public abstract class AbstractGremlinTest {
         beforeLoadGraphWith(graph);
 
         // load a graph with sample data if the annotation is present on the test
-        final LoadGraphWith loadGraphWith = loadGraphWiths.length == 0 ? null : loadGraphWiths[0];
         graphProvider.loadGraphData(graph, loadGraphWith, this.getClass(), name.getMethodName());
 
         afterLoadGraphWith(graph);
@@ -160,12 +161,25 @@ public abstract class AbstractGremlinTest {
         return graph.traversal().V().has("name", vertexName).next();
     }
 
+    public GraphTraversal<Vertex, Object> convertToVertexPropertyId(final String vertexName, final String vertexPropertyKey) {
+        return convertToVertexPropertyId(graph, vertexName, vertexPropertyKey);
+    }
+
+    public GraphTraversal<Vertex, Object> convertToVertexPropertyId(final Graph g, final String vertexName, final String vertexPropertyKey) {
+        return convertToVertexProperty(g, vertexName, vertexPropertyKey).id();
+    }
+
+    public GraphTraversal<Vertex, VertexProperty<Object>> convertToVertexProperty(final Graph graph, final String vertexName, final String vertexPropertyKey) {
+        // all test graphs have "name" as a unique id which makes it easy to hardcode this...works for now
+        return (GraphTraversal<Vertex, VertexProperty<Object>>) graph.traversal().V().has("name", vertexName).properties(vertexPropertyKey);
+    }
+
     public Object convertToEdgeId(final String outVertexName, String edgeLabel, final String inVertexName) {
         return convertToEdgeId(graph, outVertexName, edgeLabel, inVertexName);
     }
 
     public Object convertToEdgeId(final Graph graph, final String outVertexName, String edgeLabel, final String inVertexName) {
-        return graph.traversal().V().has("name", outVertexName).outE(edgeLabel).as("e").inV().has("name", inVertexName).<Edge>back("e").next().id();
+        return graph.traversal().V().has("name", outVertexName).outE(edgeLabel).as("e").inV().has("name", inVertexName).<Edge>select("e").next().id();
     }
 
     /**

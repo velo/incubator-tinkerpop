@@ -19,13 +19,7 @@
 package org.apache.tinkerpop.gremlin;
 
 import org.apache.tinkerpop.gremlin.process.traversal.TraversalEngine;
-import org.apache.tinkerpop.gremlin.structure.Edge;
-import org.apache.tinkerpop.gremlin.structure.Element;
 import org.apache.tinkerpop.gremlin.structure.Graph;
-import org.apache.tinkerpop.gremlin.structure.Property;
-import org.apache.tinkerpop.gremlin.structure.Vertex;
-import org.apache.tinkerpop.gremlin.structure.VertexProperty;
-import org.apache.commons.configuration.Configuration;
 import org.javatuples.Pair;
 import org.junit.runner.Description;
 import org.junit.runner.Runner;
@@ -41,15 +35,11 @@ import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -59,18 +49,6 @@ import java.util.stream.Stream;
  * @author Stephen Mallette (http://stephen.genoprime.com)
  */
 public abstract class AbstractGremlinSuite extends Suite {
-
-    // todo: perhaps there is a test that validates against the implementations to be sure that the Graph constructed matches what's defined???
-    private static final Set<Class> STRUCTURE_INTERFACES = new HashSet<Class>() {{
-        add(Edge.class);
-        add(Element.class);
-        add(Graph.class);
-        add(Graph.Variables.class);
-        add(Property.class);
-        add(Vertex.class);
-        add(VertexProperty.class);
-    }};
-
     /**
      * The GraphProvider instance that will be used to generate a Graph instance.
      */
@@ -92,25 +70,28 @@ public abstract class AbstractGremlinSuite extends Suite {
 
     /**
      * Indicates that this suite is for testing a gremlin flavor and is therefore not responsible for validating
-     * the suite against what the Graph implementation opts-in for.
+     * the suite against what the {@link Graph} implementation opts-in for. This setting will let Gremlin flavor
+     * developers run their test cases against a {@link Graph} without the need for the {@link Graph} to supply
+     * an {@link Graph.OptIn} annotation.  Not having that annotation is a likely case for flavors while they are
+     * under development and a {@link Graph.OptIn} is not possible.
      */
     private final boolean gremlinFlavorSuite;
 
-    public AbstractGremlinSuite(final Class<?> klass, final RunnerBuilder builder, final Class<?>[] testsToExecute) throws InitializationError {
-        this(klass, builder, testsToExecute, null);
-    }
-
-    public AbstractGremlinSuite(final Class<?> klass, final RunnerBuilder builder, final Class<?>[] testsToExecute, final Class<?>[] testsToEnforce) throws InitializationError {
-        this(klass, builder, testsToExecute, testsToEnforce, false);
-    }
-
-    public AbstractGremlinSuite(final Class<?> klass, final RunnerBuilder builder, final Class<?>[] testsToExecute, final Class<?>[] testsToEnforce,
-                                final boolean gremlinFlavorSuite) throws InitializationError {
-        this(klass, builder, testsToExecute, testsToEnforce, gremlinFlavorSuite, TraversalEngine.Type.STANDARD);
-    }
-
-    public AbstractGremlinSuite(final Class<?> klass, final RunnerBuilder builder, final Class<?>[] testsToExecute, final Class<?>[] testsToEnforce,
-                                final boolean gremlinFlavorSuite, TraversalEngine.Type traversalEngineType) throws InitializationError {
+    /**
+     * Constructs a Gremlin Test Suite implementation.
+     *
+     * @param klass Required for JUnit Suite construction
+     * @param builder Required for JUnit Suite construction
+     * @param testsToExecute The list of tests to execute
+     * @param testsToEnforce The list of tests to "enforce" such that a check is made to ensure that in this list,
+     *                       there exists an implementation in the testsToExecute (use {@code null} for no enforcement.
+     * @param gremlinFlavorSuite Ignore validation of {@link Graph.OptIn} annotations which is typically reserved for
+     *                           structure tests
+     * @param traversalEngineType The {@link TraversalEngine.Type} to enforce on this suite
+     */
+    public AbstractGremlinSuite(final Class<?> klass, final RunnerBuilder builder, final Class<?>[] testsToExecute,
+                                final Class<?>[] testsToEnforce, final boolean gremlinFlavorSuite,
+                                final TraversalEngine.Type traversalEngineType) throws InitializationError {
         super(builder, klass, enforce(testsToExecute, testsToEnforce));
 
         this.gremlinFlavorSuite = gremlinFlavorSuite;
@@ -127,9 +108,6 @@ public abstract class AbstractGremlinSuite extends Suite {
 
         try {
             final GraphProvider graphProvider = pair.getValue0().newInstance();
-            validateStructureInterfacesRegistered(graphProvider);
-            validateHelpersNotImplemented(graphProvider);
-
             GraphManager.setGraphProvider(graphProvider);
             GraphManager.setTraversalEngineType(traversalEngineType);
         } catch (Exception ex) {
@@ -137,54 +115,13 @@ public abstract class AbstractGremlinSuite extends Suite {
         }
     }
 
-    /**
-     * Need to validate that structure interfaces are implemented so that checks to {@link Graph.Helper} can be
-     * properly enforced.
-     */
-    private void validateStructureInterfacesRegistered(final GraphProvider graphProvider) throws Exception {
-        final Set<Class> implementations = graphProvider.getImplementations();
-        final Set<Class> noImplementationRegistered = new HashSet<>();
-
-        final Configuration conf = graphProvider.newGraphConfiguration("prototype", AbstractGremlinSuite.class, "validateStructureInterfacesRegistered");
-        final Graph graph = graphProvider.openTestGraph(conf);
-        final Set<Class> structureInterfaces = new HashSet<>(STRUCTURE_INTERFACES);
-
-        // not all graphs implement all features and therefore may not have implementations of certain "core" interfaces
-        if (!graph.features().graph().variables().supportsVariables()) structureInterfaces.remove(Graph.Variables.class);
-
-        graphProvider.clear(graph, conf);
-
-        final boolean missingImplementations = structureInterfaces.stream().anyMatch(iface -> {
-            final boolean noneMatch = implementations.stream().noneMatch(c -> iface.isAssignableFrom(c));
-            if (noneMatch) noImplementationRegistered.add(iface);
-            return noneMatch;
-        });
-
-        if (missingImplementations)
-            throw new RuntimeException(String.format(
-                    "Implementations must register their implementations for the following interfaces %s",
-                    String.join(",", noImplementationRegistered.stream().map(Class::getName).collect(Collectors.toList()))));
-    }
-
-    private void validateHelpersNotImplemented(final GraphProvider graphProvider) {
-        final List<String> overridenMethods = new ArrayList<>();
-        graphProvider.getImplementations().forEach(clazz ->
-                        Stream.of(clazz.getDeclaredMethods())
-                                .filter(AbstractGremlinSuite::isHelperMethodOverriden)
-                                .map(m -> m.getDeclaringClass().getName() + "." + m.getName())
-                                .forEach(overridenMethods::add)
-        );
-
-        if (overridenMethods.size() > 0)
-            throw new RuntimeException(String.format(
-                    "Implementations cannot override methods marked by @Helper annotation - check the following methods [%s]",
-                    String.join(",", overridenMethods)));
-    }
-
     private void validateOptInToSuite(final Class<? extends Graph> klass) throws InitializationError {
         final Graph.OptIn[] optIns = klass.getAnnotationsByType(Graph.OptIn.class);
-        if (!gremlinFlavorSuite && !Arrays.stream(optIns).anyMatch(optIn -> optIn.value().equals(this.getClass().getCanonicalName())))
-            throw new InitializationError("The suite will not run for this Graph until it is publicly acknowledged with the @OptIn annotation on the Graph instance itself");
+        if (!Arrays.stream(optIns).anyMatch(optIn -> optIn.value().equals(this.getClass().getCanonicalName())))
+            if (gremlinFlavorSuite)
+                System.err.println(String.format("The %s will run for this Graph as it is testing a Gremlin flavor but the Graph does not publicly acknowledged it yet with the @OptIn annotation.", this.getClass().getSimpleName()));
+            else
+                throw new InitializationError(String.format("The %s will not run for this Graph until it is publicly acknowledged with the @OptIn annotation on the Graph instance itself", this.getClass().getSimpleName()));
     }
 
     private void registerOptOuts(final Class<? extends Graph> klass) throws InitializationError {
@@ -203,7 +140,12 @@ public abstract class AbstractGremlinSuite extends Suite {
         }
     }
 
-    private static Class<?>[] enforce(final Class<?>[] testsToExecute, final Class<?>[] testsToEnforce) {
+    private static Class<?>[] enforce(final Class<?>[] unfilteredTestsToExecute, final Class<?>[] unfilteredTestsToEnforce) {
+        // Allow env var to filter the test lists.
+        final Class<?>[] testsToExecute = filterSpecifiedTests(unfilteredTestsToExecute);
+        final Class<?>[] testsToEnforce = filterSpecifiedTests(unfilteredTestsToEnforce);
+
+        // If there are no tests specified to enforce, enforce them all.
         if (null == testsToEnforce) return testsToExecute;
 
         // examine each test to enforce and ensure an instance of it is in the list of testsToExecute
@@ -217,16 +159,24 @@ public abstract class AbstractGremlinSuite extends Suite {
         return testsToExecute;
     }
 
-    public static boolean isHelperMethodOverriden(final Method myMethod) {
-        final Class<?> declaringClass = myMethod.getDeclaringClass();
-        for (Class<?> iface : declaringClass.getInterfaces()) {
-            try {
-                return iface.getMethod(myMethod.getName(), myMethod.getParameterTypes()).isAnnotationPresent(Graph.Helper.class);
-            } catch (NoSuchMethodException ignored) {
-            }
-        }
+    /**
+     * Filter a list of test classes through the GREMLIN_TESTS environment variable list.
+     */
+    private static Class<?>[] filterSpecifiedTests(Class<?>[] allTests) {
+        if (null == allTests) return allTests;
 
-        return false;
+        Class<?>[] filteredTests;
+        final String override = System.getenv().getOrDefault("GREMLIN_TESTS", "");
+        if (override.equals(""))
+            filteredTests = allTests;
+        else {
+            final List<String> filters = Arrays.asList(override.split(","));
+            final List<Class<?>> allowed = Stream.of(allTests)
+                    .filter(c -> filters.contains(c.getName()))
+                    .collect(Collectors.toList());
+            filteredTests = allowed.toArray(new Class<?>[allowed.size()]);
+        }
+        return filteredTests;
     }
 
     public static Pair<Class<? extends GraphProvider>, Class<? extends Graph>> getGraphProviderClass(final Class<?> klass) throws InitializationError {

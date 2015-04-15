@@ -24,9 +24,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
@@ -67,6 +69,28 @@ public final class IteratorUtils {
 
     public static <S> List<S> list(final Iterator<S> iterator) {
         return fill(iterator, new ArrayList<>());
+    }
+
+    public static <S> Set<S> set(final Iterator<S> iterator) {
+        return fill(iterator, new HashSet<>());
+    }
+
+    public static <S> Iterator<S> limit(final Iterator<S> iterator, int limit) {
+        return new Iterator<S>() {
+            private int count = 0;
+
+            @Override
+            public boolean hasNext() {
+                return iterator.hasNext() && this.count < limit;
+            }
+
+            @Override
+            public S next() {
+                if (this.count++ >= limit)
+                    throw FastNoSuchElementException.instance();
+                return iterator.next();
+            }
+        };
     }
 
     ///////////////////

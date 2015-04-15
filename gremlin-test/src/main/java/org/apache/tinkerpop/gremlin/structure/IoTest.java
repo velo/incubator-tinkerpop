@@ -20,13 +20,10 @@ package org.apache.tinkerpop.gremlin.structure;
 
 import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializerProvider;
-import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
@@ -81,7 +78,6 @@ import java.io.StringWriter;
 import java.io.Writer;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -164,7 +160,7 @@ public class IoTest extends AbstractGremlinTest {
         try {
             graph.io().writeGraphML(f.getAbsolutePath());
 
-            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName());
+            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.CLASSIC);
             final Graph g1 = graphProvider.openTestGraph(configuration);
             g1.io().readGraphML(f.getAbsolutePath());
 
@@ -237,7 +233,7 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_STRING_IDS)
     public void shouldProperlyEncodeWithGraphML() throws Exception {
         final Vertex v = graph.addVertex(T.id, "1");
-        v.property("text", "\u00E9");
+        v.property(VertexProperty.Cardinality.single, "text", "\u00E9");
 
         final GraphMLWriter w = GraphMLWriter.build().create();
 
@@ -249,8 +245,7 @@ public class IoTest extends AbstractGremlinTest {
         validateXmlAgainstGraphMLXsd(f);
 
         // reusing the same config used for creation of "g".
-        final Configuration configuration = graphProvider.newGraphConfiguration(
-                "g2", this.getClass(), name.getMethodName());
+        final Configuration configuration = graphProvider.newGraphConfiguration("g2", this.getClass(), name.getMethodName(), null);
         graphProvider.clear(configuration);
         final Graph g2 = graphProvider.openTestGraph(configuration);
         final GraphMLReader r = GraphMLReader.build().create();
@@ -273,13 +268,12 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = FEATURE_USER_SUPPLIED_IDS)
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = FEATURE_ANY_IDS)
-    public void shouldProperlySerializeDeserializeCustomIdWithGraphSON() throws Exception {
+    public void shouldProperlySerializeCustomIdWithGraphSON() throws Exception {
         final UUID id = UUID.fromString("AF4B5965-B176-4552-B3C1-FBBE2F52C305");
         graph.addVertex(T.id, new CustomId("vertex", id));
 
         final SimpleModule module = new SimpleModule();
         module.addSerializer(CustomId.class, new CustomId.CustomIdJacksonSerializer());
-        module.addDeserializer(CustomId.class, new CustomId.CustomIdJacksonDeserializer());
         final GraphWriter writer = graph.io().graphSONWriter().mapper(
                 graph.io().graphSONMapper().addCustomModule(module).embedTypes(true).create()).create();
 
@@ -295,8 +289,7 @@ public class IoTest extends AbstractGremlinTest {
             assertEquals("AF4B5965-B176-4552-B3C1-FBBE2F52C305".toLowerCase(), idValue.get("elementId").asText());
 
             // reusing the same config used for creation of "g".
-            final Configuration configuration = graphProvider.newGraphConfiguration(
-                    "g2", this.getClass(), name.getMethodName());
+            final Configuration configuration = graphProvider.newGraphConfiguration("g2", this.getClass(), name.getMethodName(), null);
             graphProvider.clear(configuration);
             final Graph g2 = graphProvider.openTestGraph(configuration);
 
@@ -327,7 +320,7 @@ public class IoTest extends AbstractGremlinTest {
         final GryoWriter writer = GryoWriter.build().mapper(gryo).create();
         final GryoReader reader = GryoReader.build().workingDirectory(tempPath).mapper(gryo).create();
 
-        final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName());
+        final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), null);
         graphProvider.clear(configuration);
         final Graph g1 = graphProvider.openTestGraph(configuration);
 
@@ -347,7 +340,7 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
     public void shouldMigrateGraphWithFloat() throws Exception {
-        final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName());
+        final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), null);
         graphProvider.clear(configuration);
         final Graph g1 = graphProvider.openTestGraph(configuration);
 
@@ -367,7 +360,7 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
     public void shouldMigrateGraph() throws Exception {
-        final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName());
+        final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.MODERN);
         graphProvider.clear(configuration);
         final Graph g1 = graphProvider.openTestGraph(configuration);
 
@@ -394,7 +387,7 @@ public class IoTest extends AbstractGremlinTest {
             final GryoWriter writer = graph.io().gryoWriter().create();
             writer.writeGraph(os, graph);
 
-            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName());
+            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.MODERN);
             graphProvider.clear(configuration);
             final Graph g1 = graphProvider.openTestGraph(configuration);
             final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
@@ -421,7 +414,7 @@ public class IoTest extends AbstractGremlinTest {
         try {
             graph.io().writeGryo(f.getAbsolutePath());
 
-            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName());
+            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.MODERN);
             final Graph g1 = graphProvider.openTestGraph(configuration);
             g1.io().readGryo(f.getAbsolutePath());
 
@@ -448,7 +441,7 @@ public class IoTest extends AbstractGremlinTest {
             final GryoWriter writer = graph.io().gryoWriter().create();
             writer.writeGraph(os, graph);
 
-            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName());
+            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.CREW);
             graphProvider.clear(configuration);
             final Graph g1 = graphProvider.openTestGraph(configuration);
             final GryoReader reader = GryoReader.build()
@@ -478,7 +471,7 @@ public class IoTest extends AbstractGremlinTest {
             final GryoWriter writer = graph.io().gryoWriter().create();
             writer.writeGraph(os, graph);
 
-            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName());
+            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.CLASSIC);
             graphProvider.clear(configuration);
             final Graph g1 = graphProvider.openTestGraph(configuration);
             final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
@@ -502,7 +495,7 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONWriter writer = graph.io().graphSONWriter().create();
             writer.writeGraph(os, graph);
 
-            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName());
+            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.CLASSIC);
             graphProvider.clear(configuration);
             final Graph g1 = graphProvider.openTestGraph(configuration);
             final GraphSONReader reader = graph.io().graphSONReader().create();
@@ -526,7 +519,7 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONWriter writer = graph.io().graphSONWriter().create();
             writer.writeGraph(os, graph);
 
-            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName());
+            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.MODERN);
             graphProvider.clear(configuration);
             final Graph g1 = graphProvider.openTestGraph(configuration);
             final GraphSONReader reader = graph.io().graphSONReader().create();
@@ -550,7 +543,7 @@ public class IoTest extends AbstractGremlinTest {
         try {
             graph.io().writeGraphSON(f.getAbsolutePath());
 
-            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName());
+            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.MODERN);
             graphProvider.clear(configuration);
             final Graph g1 = graphProvider.openTestGraph(configuration);
             g1.io().readGraphSON(f.getAbsolutePath());
@@ -576,7 +569,7 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONWriter writer = graph.io().graphSONWriter().create();
             writer.writeGraph(os, graph);
 
-            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName());
+            final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.CREW);
             graphProvider.clear(configuration);
             final Graph g1 = graphProvider.openTestGraph(configuration);
             final GraphSONReader reader = graph.io().graphSONReader().create();
@@ -747,9 +740,9 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONReader reader = graph.io().graphSONReader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readEdge(bais, detachedEdge -> {
-                    assertEquals(e.id().toString(), detachedEdge.id().toString()); // lossy
-                    assertEquals(v1.id().toString(), detachedEdge.outVertex().id().toString()); // lossy
-                    assertEquals(v2.id().toString(), detachedEdge.inVertex().id().toString());  // lossy
+                    assertEquals(e.id(), graph.edges(detachedEdge.id().toString()).next().id());
+                    assertEquals(v1.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
+                    assertEquals(v2.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
                     assertEquals(v1.label(), detachedEdge.outVertex().label());
                     assertEquals(v2.label(), detachedEdge.inVertex().label());
                     assertEquals(e.label(), detachedEdge.label());
@@ -782,9 +775,9 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONReader reader = graph.io().graphSONReader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readEdge(bais, detachedEdge -> {
-                    assertEquals(e.id().toString(), detachedEdge.id().toString()); // lossy
-                    assertEquals(v1.id().toString(), detachedEdge.outVertex().id().toString()); // lossy
-                    assertEquals(v2.id().toString(), detachedEdge.inVertex().id().toString());  // lossy
+                    assertEquals(e.id(), graph.edges(detachedEdge.id().toString()).next().id());
+                    assertEquals(v1.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
+                    assertEquals(v2.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
                     assertEquals(v1.label(), detachedEdge.outVertex().label());
                     assertEquals(v2.label(), detachedEdge.inVertex().label());
                     assertEquals(e.label(), detachedEdge.label());
@@ -816,9 +809,9 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONReader reader = graph.io().graphSONReader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readEdge(bais, detachedEdge -> {
-                    assertEquals(e.id().toString(), detachedEdge.id().toString()); // lossy
-                    assertEquals(v1.id().toString(), detachedEdge.outVertex().id().toString()); // lossy
-                    assertEquals(v2.id().toString(), detachedEdge.inVertex().id().toString());  // lossy
+                    assertEquals(e.id(), graph.edges(detachedEdge.id().toString()).next().id());
+                    assertEquals(v1.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
+                    assertEquals(v2.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
                     assertEquals(v1.label(), detachedEdge.outVertex().label());
                     assertEquals(v2.label(), detachedEdge.inVertex().label());
                     assertEquals(e.label(), detachedEdge.label());
@@ -888,9 +881,12 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONReader reader = graph.io().graphSONReader().mapper(graph.io().graphSONMapper().embedTypes(true).create()).create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readEdge(bais, detachedEdge -> {
-                    assertEquals(e.id(), graphProvider.reconstituteGraphSONIdentifier(Edge.class, detachedEdge.id()));
-                    assertEquals(v1.id(), graphProvider.reconstituteGraphSONIdentifier(Vertex.class, detachedEdge.outVertex().id()));
-                    assertEquals(v2.id(), graphProvider.reconstituteGraphSONIdentifier(Vertex.class, detachedEdge.inVertex().id()));
+                    // a quick reminder here that the purpose of these id assertions is to ensure that those with
+                    // complex ids that are not simply toString'd (i.e. are complex objects in JSON as well)
+                    // properly respond to filtering in Graph.edges/vertices
+                    assertEquals(e.id(), graph.edges(detachedEdge.id()).next().id());
+                    assertEquals(v1.id(), graph.vertices(detachedEdge.outVertex().id()).next().id());
+                    assertEquals(v2.id(), graph.vertices(detachedEdge.inVertex().id()).next().id());
                     assertEquals(v1.label(), detachedEdge.outVertex().label());
                     assertEquals(v2.label(), detachedEdge.inVertex().label());
                     assertEquals(e.label(), detachedEdge.label());
@@ -1078,7 +1074,7 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_META_PROPERTIES)
     public void shouldReadWriteVertexMultiPropsNoEdgesToGryo() throws Exception {
         final Vertex v1 = graph.addVertex("name", "marko", "name", "mark", "acl", "rw");
-        v1.property("propsSquared", 123, "x", "a", "y", "b");
+        v1.property(VertexProperty.Cardinality.single, "propsSquared", 123, "x", "a", "y", "b");
         final Vertex v2 = graph.addVertex();
         v1.addEdge("friends", v2, "weight", 0.5d);
 
@@ -1125,7 +1121,7 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONReader reader = graph.io().graphSONReader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readVertex(bais, detachedVertex -> {
-                    assertEquals(v1.id().toString(), detachedVertex.id().toString()); // lossy
+                    assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
                     assertEquals(v1.label(), detachedVertex.label());
                     assertEquals(2, IteratorUtils.count(detachedVertex.properties()));
                     assertEquals("marko", detachedVertex.properties("name").next().value());
@@ -1159,7 +1155,7 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONReader reader = graph.io().graphSONReader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readVertex(bais, detachedVertex -> {
-                    assertEquals(v1.id().toString(), detachedVertex.id().toString()); // lossy
+                    assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
                     assertEquals(v1.label(), detachedVertex.label());
                     assertEquals(2, IteratorUtils.count(detachedVertex.properties()));
                     assertEquals("marko", detachedVertex.properties("name").next().value());
@@ -1193,7 +1189,7 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONReader reader = graph.io().graphSONReader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readVertex(bais, detachedVertex -> {
-                    assertEquals(v1.id().toString(), detachedVertex.id().toString()); // lossy
+                    assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
                     assertEquals(v1.label(), detachedVertex.label());
                     assertEquals(0, IteratorUtils.count(detachedVertex.properties()));
 
@@ -1215,7 +1211,7 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_META_PROPERTIES)
     public void shouldReadWriteVertexMultiPropsNoEdgesToGraphSON() throws Exception {
         final Vertex v1 = graph.addVertex("name", "marko", "name", "mark", "acl", "rw");
-        v1.property("propsSquared", 123, "x", "a", "y", "b");
+        v1.property(VertexProperty.Cardinality.single, "propsSquared", 123, "x", "a", "y", "b");
         final Vertex v2 = graph.addVertex();
         v1.addEdge("friends", v2, "weight", 0.5d);
 
@@ -1227,7 +1223,7 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONReader reader = graph.io().graphSONReader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readVertex(bais, detachedVertex -> {
-                    assertEquals(v1.id().toString(), detachedVertex.id().toString()); // lossy
+                    assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
                     assertEquals(v1.label(), detachedVertex.label());
                     assertEquals(4, IteratorUtils.count(detachedVertex.properties()));
                     assertEquals("a", detachedVertex.property("propsSquared").value("x"));
@@ -1395,7 +1391,7 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONReader reader = graph.io().graphSONReader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readVertex(bais, Direction.OUT, detachedVertex -> {
-                            assertEquals(v1.id().toString(), detachedVertex.id().toString());  // lossy
+                            assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
                             assertEquals(v1.label(), detachedVertex.label());
                             assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
                             assertEquals("marko", detachedVertex.value("name"));
@@ -1403,9 +1399,9 @@ public class IoTest extends AbstractGremlinTest {
                             return null;
                         },
                         detachedEdge -> {
-                            assertEquals(e.id().toString(), detachedEdge.id().toString());  // lossy
-                            assertEquals(v1.id().toString(), detachedEdge.outVertex().id().toString());  // lossy
-                            assertEquals(v2.id().toString(), detachedEdge.inVertex().id().toString());   // lossy
+                            assertEquals(e.id(), graph.edges(detachedEdge.id().toString()).next().id());
+                            assertEquals(v1.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
+                            assertEquals(v2.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
                             assertEquals(v1.label(), detachedEdge.outVertex().label());
                             assertEquals(v2.label(), detachedEdge.inVertex().label());
                             assertEquals(e.label(), detachedEdge.label());
@@ -1492,7 +1488,7 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONReader reader = graph.io().graphSONReader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readVertex(bais, Direction.IN, detachedVertex -> {
-                            assertEquals(v1.id().toString(), detachedVertex.id().toString());  // lossy
+                            assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
                             assertEquals(v1.label(), detachedVertex.label());
                             assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
                             assertEquals("marko", detachedVertex.value("name"));
@@ -1500,9 +1496,9 @@ public class IoTest extends AbstractGremlinTest {
                             return null;
                         },
                         detachedEdge -> {
-                            assertEquals(e.id().toString(), detachedEdge.id().toString());  // lossy
-                            assertEquals(v1.id().toString(), detachedEdge.inVertex().id().toString());  // lossy
-                            assertEquals(v2.id().toString(), detachedEdge.outVertex().id().toString());   // lossy
+                            assertEquals(e.id(), graph.edges(detachedEdge.id().toString()).next().id());
+                            assertEquals(v1.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
+                            assertEquals(v2.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
                             assertEquals(v1.label(), detachedEdge.outVertex().label());
                             assertEquals(v2.label(), detachedEdge.inVertex().label());
                             assertEquals(e.label(), detachedEdge.label());
@@ -1606,7 +1602,7 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONReader reader = graph.io().graphSONReader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readVertex(bais, Direction.BOTH, detachedVertex -> {
-                            assertEquals(v1.id().toString(), detachedVertex.id().toString());  // lossy
+                            assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
                             assertEquals(v1.label(), detachedVertex.label());
                             assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
                             assertEquals("marko", detachedVertex.value("name"));
@@ -1614,20 +1610,20 @@ public class IoTest extends AbstractGremlinTest {
                             return null;
                         },
                         detachedEdge -> {
-                            if (detachedEdge.id().toString().equals(e1.id().toString())) {      // lossy
-                                assertEquals(e1.id().toString(), detachedEdge.id().toString());  // lossy
-                                assertEquals(v1.id().toString(), detachedEdge.inVertex().id().toString());  // lossy
-                                assertEquals(v2.id().toString(), detachedEdge.outVertex().id().toString());   // lossy
+                            if (graph.edges(detachedEdge.id().toString()).next().id().equals(e1.id())) {
+                                assertEquals(e1.id(), graph.edges(detachedEdge.id().toString()).next().id());
+                                assertEquals(v1.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
+                                assertEquals(v2.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
                                 assertEquals(v1.label(), detachedEdge.outVertex().label());
                                 assertEquals(v2.label(), detachedEdge.inVertex().label());
                                 assertEquals(e1.label(), detachedEdge.label());
                                 assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
                                 assertEquals(0.5d, detachedEdge.value("weight"), 0.000001d);                      // lossy
                                 edge1Called.set(true);
-                            } else if (detachedEdge.id().toString().equals(e2.id().toString())) { // lossy
-                                assertEquals(e2.id().toString(), detachedEdge.id().toString());  // lossy
-                                assertEquals(v2.id().toString(), detachedEdge.inVertex().id().toString());  // lossy
-                                assertEquals(v1.id().toString(), detachedEdge.outVertex().id().toString());   // lossy
+                            } else if (graph.edges(detachedEdge.id().toString()).next().id().equals(e2.id())) {
+                                assertEquals(e2.id(), graph.edges(detachedEdge.id().toString()).next().id());
+                                assertEquals(v2.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
+                                assertEquals(v1.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
                                 assertEquals(v1.label(), detachedEdge.outVertex().label());
                                 assertEquals(v2.label(), detachedEdge.inVertex().label());
                                 assertEquals(e2.label(), detachedEdge.label());
@@ -1671,25 +1667,31 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONReader reader = graph.io().graphSONReader().mapper(graph.io().graphSONMapper().embedTypes(true).create()).create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readVertex(bais, Direction.BOTH, detachedVertex -> {
-                    assertEquals(v1.id(), graphProvider.reconstituteGraphSONIdentifier(Vertex.class, detachedVertex.id()));
+                    // a quick reminder here that the purpose of these id assertions is to ensure that those with
+                    // complex ids that are not simply toString'd (i.e. are complex objects in JSON as well)
+                    // properly respond to filtering in Graph.edges/vertices
+                    assertEquals(v1.id(), graph.vertices(detachedVertex.id()).next().id());
                     assertEquals(v1.label(), detachedVertex.label());
                     assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
                     assertEquals(v1.value("name"), detachedVertex.value("name").toString());
                     vertexCalled.set(true);
                     return null;
                 }, detachedEdge -> {
-                    if (graphProvider.reconstituteGraphSONIdentifier(Edge.class, detachedEdge.id()).equals(e1.id())) {
-                        assertEquals(v2.id(), graphProvider.reconstituteGraphSONIdentifier(Vertex.class, detachedEdge.outVertex().id()));
-                        assertEquals(v1.id(), graphProvider.reconstituteGraphSONIdentifier(Vertex.class, detachedEdge.inVertex().id()));
+                    // a quick reminder here that the purpose of these id assertions is to ensure that those with
+                    // complex ids that are not simply toString'd (i.e. are complex objects in JSON as well)
+                    // properly respond to filtering in Graph.edges/vertices
+                    if (graph.edges(detachedEdge.id()).next().id().equals(e1.id())) {
+                        assertEquals(v2.id(), graph.vertices(detachedEdge.outVertex().id()).next().id());
+                        assertEquals(v1.id(), graph.vertices(detachedEdge.inVertex().id()).next().id());
                         assertEquals(v1.label(), detachedEdge.outVertex().label());
                         assertEquals(v2.label(), detachedEdge.inVertex().label());
                         assertEquals(e1.label(), detachedEdge.label());
                         assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
                         assertEquals(0.5f, detachedEdge.value("weight"), 0.00001f);
                         edge1Called.set(true);
-                    } else if (graphProvider.reconstituteGraphSONIdentifier(Edge.class, detachedEdge.id()).equals(e2.id())) {
-                        assertEquals(v1.id(), graphProvider.reconstituteGraphSONIdentifier(Vertex.class, detachedEdge.outVertex().id()));
-                        assertEquals(v2.id(), graphProvider.reconstituteGraphSONIdentifier(Vertex.class, detachedEdge.inVertex().id()));
+                    } else if (graph.edges(detachedEdge.id()).next().id().equals(e2.id())) {
+                        assertEquals(v1.id(), graph.vertices(detachedEdge.outVertex().id()).next().id());
+                        assertEquals(v2.id(), graph.vertices(detachedEdge.inVertex().id()).next().id());
                         assertEquals(v1.label(), detachedEdge.outVertex().label());
                         assertEquals(v2.label(), detachedEdge.inVertex().label());
                         assertEquals(e1.label(), detachedEdge.label());
@@ -1785,7 +1787,7 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONReader reader = graph.io().graphSONReader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readVertex(bais, Direction.IN, detachedVertex -> {
-                    assertEquals(v1.id().toString(), detachedVertex.id().toString());  // lossy
+                    assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
                     assertEquals(v1.label(), detachedVertex.label());
                     assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
                     assertEquals("marko", detachedVertex.value("name"));
@@ -1793,10 +1795,10 @@ public class IoTest extends AbstractGremlinTest {
 
                     return null;
                 }, detachedEdge -> {
-                    if (detachedEdge.id().toString().equals(e1.id().toString())) { // lossy
-                        assertEquals(e1.id().toString(), detachedEdge.id().toString());  // lossy
-                        assertEquals(v1.id().toString(), detachedEdge.inVertex().id().toString());  // lossy
-                        assertEquals(v2.id().toString(), detachedEdge.outVertex().id().toString());   // lossy
+                    if (graph.edges(detachedEdge.id().toString()).next().id().equals(e1.id())) {
+                        assertEquals(e1.id(), graph.edges(detachedEdge.id().toString()).next().id());
+                        assertEquals(v1.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
+                        assertEquals(v2.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
                         assertEquals(v1.label(), detachedEdge.outVertex().label());
                         assertEquals(v2.label(), detachedEdge.inVertex().label());
                         assertEquals(e1.label(), detachedEdge.label());
@@ -1892,17 +1894,17 @@ public class IoTest extends AbstractGremlinTest {
             final GraphSONReader reader = graph.io().graphSONReader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readVertex(bais, Direction.OUT, detachedVertex -> {
-                    assertEquals(v1.id().toString(), detachedVertex.id().toString());  // lossy
+                    assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
                     assertEquals(v1.label(), detachedVertex.label());
                     assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
                     assertEquals("marko", detachedVertex.value("name"));
                     vertexCalled.set(true);
                     return null;
                 }, detachedEdge -> {
-                    if (detachedEdge.id().toString().equals(e2.id().toString())) {     // lossy
-                        assertEquals(e2.id().toString(), detachedEdge.id().toString());  // lossy
-                        assertEquals(v2.id().toString(), detachedEdge.inVertex().id().toString());  // lossy
-                        assertEquals(v1.id().toString(), detachedEdge.outVertex().id().toString());   // lossy
+                    if (graph.edges(detachedEdge.id().toString()).next().id().equals(e2.id())) {
+                        assertEquals(e2.id(), graph.edges(detachedEdge.id().toString()).next().id());
+                        assertEquals(v2.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
+                        assertEquals(v1.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
                         assertEquals(v1.label(), detachedEdge.outVertex().label());
                         assertEquals(v2.label(), detachedEdge.inVertex().label());
                         assertEquals(e2.label(), detachedEdge.label());
@@ -2187,19 +2189,19 @@ public class IoTest extends AbstractGremlinTest {
         final Vertex v9 = (Vertex) g1.traversal().V().has("name", "daniel").next();
         assertEquals("person", v9.label());
         assertEquals(2, v9.keys().size());
-        assertEquals(3, (int) StreamFactory.stream(v9.properties("location")).count());
+        assertEquals(3, (int) IteratorUtils.count(v9.properties("location")));
         v9.properties("location").forEachRemaining(vp -> {
             if (vp.value().equals("spremberg")) {
                 assertEquals(1982, (int) vp.value("startTime"));
                 assertEquals(2005, (int) vp.value("endTime"));
-                assertEquals(2, (int) StreamFactory.stream(vp.properties()).count());
+                assertEquals(2, (int) IteratorUtils.count(vp.properties()));
             } else if (vp.value().equals("kaiserslautern")) {
                 assertEquals(2005, (int) vp.value("startTime"));
                 assertEquals(2009, (int) vp.value("endTime"));
-                assertEquals(2, (int) StreamFactory.stream(vp.properties()).count());
+                assertEquals(2, (int) IteratorUtils.count(vp.properties()));
             } else if (vp.value().equals("aachen")) {
                 assertEquals(2009, (int) vp.value("startTime"));
-                assertEquals(1, (int) StreamFactory.stream(vp.properties()).count());
+                assertEquals(1, (int) IteratorUtils.count(vp.properties()));
             } else {
                 fail("Found a value that should be there");
             }
@@ -2559,6 +2561,11 @@ public class IoTest extends AbstractGremlinTest {
             return elementId;
         }
 
+        @Override
+        public String toString() {
+            return cluster + ":" + elementId;
+        }
+
         static class CustomIdJacksonSerializer extends StdSerializer<CustomId> {
             public CustomIdJacksonSerializer() {
                 super(CustomId.class);
@@ -2567,54 +2574,24 @@ public class IoTest extends AbstractGremlinTest {
             @Override
             public void serialize(final CustomId customId, final JsonGenerator jsonGenerator, final SerializerProvider serializerProvider)
                     throws IOException, JsonGenerationException {
-                ser(customId, jsonGenerator, false);
+                // when types are not embedded, stringify or resort to JSON primitive representations of the
+                // type so that non-jvm languages can better interoperate with the TinkerPop stack.
+                jsonGenerator.writeString(customId.toString());
             }
 
             @Override
             public void serializeWithType(final CustomId customId, final JsonGenerator jsonGenerator,
                                           final SerializerProvider serializerProvider, final TypeSerializer typeSerializer) throws IOException, JsonProcessingException {
-                ser(customId, jsonGenerator, true);
-            }
-
-            private void ser(final CustomId customId, final JsonGenerator jsonGenerator, final boolean includeType) throws IOException {
+                // when the type is included add "class" as a key and then try to utilize as much of the
+                // default serialization provided by jackson data-bind as possible.  for example, write
+                // the uuid as an object so that when jackson serializes it, it uses the uuid serializer
+                // to write it out with the type.  in this way, data-bind should be able to deserialize
+                // it back when types are embedded.
                 jsonGenerator.writeStartObject();
-
-                if (includeType)
-                    jsonGenerator.writeStringField(GraphSONTokens.CLASS, CustomId.class.getName());
-
-                jsonGenerator.writeObjectField("cluster", customId.getCluster());
-                jsonGenerator.writeObjectField("elementId", customId.getElementId().toString());
+                jsonGenerator.writeStringField(GraphSONTokens.CLASS, CustomId.class.getName());
+                jsonGenerator.writeStringField("cluster", customId.getCluster());
+                jsonGenerator.writeObjectField("elementId", customId.getElementId());
                 jsonGenerator.writeEndObject();
-            }
-        }
-
-        static class CustomIdJacksonDeserializer extends StdDeserializer<CustomId> {
-            public CustomIdJacksonDeserializer() {
-                super(CustomId.class);
-            }
-
-            @Override
-            public CustomId deserialize(final JsonParser jsonParser, final DeserializationContext deserializationContext) throws IOException, JsonProcessingException {
-                String cluster = null;
-                UUID id = null;
-
-                while (!jsonParser.getCurrentToken().isStructEnd()) {
-                    if (jsonParser.getText().equals("cluster")) {
-                        jsonParser.nextToken();
-                        cluster = jsonParser.getText();
-                    } else if (jsonParser.getText().equals("elementId")) {
-                        jsonParser.nextToken();
-                        id = UUID.fromString(jsonParser.getText());
-                    } else
-                        jsonParser.nextToken();
-                }
-
-                if (!Optional.ofNullable(cluster).isPresent())
-                    throw deserializationContext.mappingException("Could not deserialze CustomId: 'cluster' is required");
-                if (!Optional.ofNullable(id).isPresent())
-                    throw deserializationContext.mappingException("Could not deserialze CustomId: 'id' is required");
-
-                return new CustomId(cluster, id);
             }
         }
     }

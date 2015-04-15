@@ -16,18 +16,20 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.tinkerpop.gremlin.structure.util.detached;
+package org.apache.tinkerpop.gremlin.process.traversal
 
-import org.apache.tinkerpop.gremlin.structure.Graph;
-import org.apache.tinkerpop.gremlin.structure.Vertex;
+import org.apache.tinkerpop.gremlin.process.UseEngine
 
 /**
- * An interface that provides methods for detached properties and elements to be re-attached to the {@link Graph}.
- *
  * @author Stephen Mallette (http://stephen.genoprime.com)
  */
-public interface Attachable<T> {
-    public abstract T attach(final Vertex hostVertex) throws IllegalStateException;
+abstract class GroovyTraversalSideEffectsTest {
 
-    public abstract T attach(final Graph hostGraph) throws IllegalStateException;
+    @UseEngine(TraversalEngine.Type.STANDARD)
+    public static class StandardTraversals extends TraversalSideEffectsTest {
+        @Override
+        TraversalSideEffects get_g_V_asAdmin_getSideEffects() {
+            g.V.asAdmin().sideEffects
+        }
+    }
 }

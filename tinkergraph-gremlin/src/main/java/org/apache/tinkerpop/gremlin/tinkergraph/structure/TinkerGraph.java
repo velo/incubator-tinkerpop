@@ -40,7 +40,9 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
 /**
@@ -69,7 +71,11 @@ public class TinkerGraph implements Graph {
         this.setProperty(Graph.GRAPH, TinkerGraph.class.getName());
     }};
 
-    protected Long currentId = -1l;
+    public static final String CONFIG_VERTEX_ID = "gremlin.tinkergraph.vertexIdManager";
+    public static final String CONFIG_EDGE_ID = "gremlin.tinkergraph.edgeIdManager";
+    public static final String CONFIG_VERTEX_PROPERTY_ID = "gremlin.tinkergraph.vertexPropertyIdManager";
+
+    protected AtomicLong currentId = new AtomicLong(-1l);
     protected Map<Object, Vertex> vertices = new ConcurrentHashMap<>();
     protected Map<Object, Edge> edges = new ConcurrentHashMap<>();
 
@@ -78,12 +84,22 @@ public class TinkerGraph implements Graph {
     protected TinkerIndex<TinkerVertex> vertexIndex = null;
     protected TinkerIndex<TinkerEdge> edgeIndex = null;
 
-    private final static TinkerGraph EMPTY_GRAPH = new TinkerGraph();
+    private final static TinkerGraph EMPTY_GRAPH = new TinkerGraph(EMPTY_CONFIGURATION);
+
+    protected final IdManager<?> vertexIdManager;
+    protected final IdManager<?> edgeIdManager;
+    protected final IdManager<?> vertexPropertyIdManager;
+
+    private final Configuration configuration;
 
     /**
      * An empty private constructor that initializes {@link TinkerGraph}.
      */
-    private TinkerGraph() {
+    private TinkerGraph(final Configuration configuration) {
+        this.configuration = configuration;
+        vertexIdManager = selectIdManager(configuration, CONFIG_VERTEX_ID, Vertex.class);
+        edgeIdManager = selectIdManager(configuration, CONFIG_EDGE_ID, Edge.class);
+        vertexPropertyIdManager = selectIdManager(configuration, CONFIG_VERTEX_PROPERTY_ID, VertexProperty.class);
     }
 
     public static TinkerGraph empty() {
@@ -99,7 +115,7 @@ public class TinkerGraph implements Graph {
      * Test Suite.
      */
     public static TinkerGraph open() {
-        return open(null);
+        return open(EMPTY_CONFIGURATION);
     }
 
     /**
@@ -118,7 +134,7 @@ public class TinkerGraph implements Graph {
      * @return a newly opened {@link org.apache.tinkerpop.gremlin.structure.Graph}
      */
     public static TinkerGraph open(final Configuration configuration) {
-        return new TinkerGraph();
+        return new TinkerGraph(configuration);
     }
 
     ////////////// STRUCTURE API METHODS //////////////////
@@ -126,18 +142,19 @@ public class TinkerGraph implements Graph {
     @Override
     public Vertex addVertex(final Object... keyValues) {
         ElementHelper.legalPropertyKeyValueArray(keyValues);
-        Object idValue = ElementHelper.getIdValue(keyValues).orElse(null);
+        Object idValue = vertexIdManager.convert(ElementHelper.getIdValue(keyValues).orElse(null));
         final String label = ElementHelper.getLabelValue(keyValues).orElse(Vertex.DEFAULT_LABEL);
 
         if (null != idValue) {
             if (this.vertices.containsKey(idValue))
                 throw Exceptions.vertexWithIdAlreadyExists(idValue);
         } else {
-            idValue = TinkerHelper.getNextId(this);
+            idValue = vertexIdManager.getNextId(this);
         }
 
         final Vertex vertex = new TinkerVertex(idValue, label, this);
         this.vertices.put(vertex.id(), vertex);
+
         ElementHelper.attachProperties(vertex, VertexProperty.Cardinality.list, keyValues);
         return vertex;
     }
@@ -170,7 +187,7 @@ public class TinkerGraph implements Graph {
         this.vertices.clear();
         this.edges.clear();
         this.variables = null;
-        this.currentId = 0l;
+        this.currentId.set(-1l);
         this.vertexIndex = null;
         this.edgeIndex = null;
     }
@@ -187,29 +204,52 @@ public class TinkerGraph implements Graph {
 
     @Override
     public Configuration configuration() {
-        return EMPTY_CONFIGURATION;
+        return configuration;
     }
 
     @Override
     public Iterator<Vertex> vertices(final Object... vertexIds) {
-        if (0 == vertexIds.length) {
-            return this.vertices.values().iterator();
-        } else if (1 == vertexIds.length) {
-            final Vertex vertex = this.vertices.get(vertexIds[0]);
-            return null == vertex ? Collections.emptyIterator() : IteratorUtils.of(vertex);
-        } else
-            return Stream.of(vertexIds).map(this.vertices::get).filter(Objects::nonNull).iterator();
+        return createElementIterator(Vertex.class, vertices, vertexIdManager, vertexIds);
     }
 
     @Override
     public Iterator<Edge> edges(final Object... edgeIds) {
-        if (0 == edgeIds.length) {
-            return this.edges.values().iterator();
-        } else if (1 == edgeIds.length) {
-            final Edge edge = this.edges.get(edgeIds[0]);
-            return null == edge ? Collections.emptyIterator() : IteratorUtils.of(edge);
-        } else
-            return Stream.of(edgeIds).map(this.edges::get).filter(Objects::nonNull).iterator();
+        return createElementIterator(Edge.class, edges, edgeIdManager, edgeIds);
+    }
+
+    private <T extends Element> Iterator<T> createElementIterator(final Class<T> clazz, final Map<Object, T> elements,
+                                                                  final IdManager idManager,
+                                                                  final Object... ids) {
+        if (0 == ids.length) {
+            return elements.values().iterator();
+        } else if (1 == ids.length) {
+            if (clazz.isAssignableFrom(ids[0].getClass())) {
+                // no need to get the edge again, so just flip it back - some implementation may want to treat this
+                // as a refresh operation. that's not necessary for tinkergraph.
+                return IteratorUtils.of((T) ids[0]);
+            } else {
+                // convert the id to the expected data type and lookup the vertex
+                final T element = elements.get(idManager.convert(ids[0]));
+                return null == element ? Collections.emptyIterator() : IteratorUtils.of(element);
+            }
+        } else {
+            // base the conversion function on the first item in the id list as the expectation is that these
+            // id values will be a uniform list
+            if (clazz.isAssignableFrom(ids[0].getClass())) {
+                // based on the first item assume all vertices in the argument list
+                if (!Stream.of(ids).allMatch(id -> clazz.isAssignableFrom(id.getClass())))
+                    throw Graph.Exceptions.idArgsMustBeEitherIdOrElement();
+
+                // no need to get the vertices again, so just flip it back - some implementation may want to treat this
+                // as a refresh operation. that's not necessary for tinkergraph.
+                return Stream.of(ids).map(id -> (T) id).iterator();
+            } else {
+                final Class<?> firstClass = ids[0].getClass();
+                if (!Stream.of(ids).map(Object::getClass).allMatch(firstClass::equals))
+                    throw Graph.Exceptions.idArgsMustBeEitherIdOrElement();
+                return Stream.of(ids).map(id -> idManager.convert(id)).map(elements::get).filter(Objects::nonNull).iterator();
+            }
+        }
     }
 
     /**
@@ -249,11 +289,11 @@ public class TinkerGraph implements Graph {
         public String toString() {
             return StringFactory.featureString(this);
         }
+
     }
-
     public static class TinkerGraphVertexFeatures implements Features.VertexFeatures {
-        static final TinkerGraphVertexFeatures INSTANCE = new TinkerGraphVertexFeatures();
 
+        static final TinkerGraphVertexFeatures INSTANCE = new TinkerGraphVertexFeatures();
         private TinkerGraphVertexFeatures() {
         }
 
@@ -261,11 +301,11 @@ public class TinkerGraph implements Graph {
         public boolean supportsCustomIds() {
             return false;
         }
+
     }
-
     public static class TinkerGraphEdgeFeatures implements Features.EdgeFeatures {
-        static final TinkerGraphEdgeFeatures INSTANCE = new TinkerGraphEdgeFeatures();
 
+        static final TinkerGraphEdgeFeatures INSTANCE = new TinkerGraphEdgeFeatures();
         private TinkerGraphEdgeFeatures() {
         }
 
@@ -273,11 +313,11 @@ public class TinkerGraph implements Graph {
         public boolean supportsCustomIds() {
             return false;
         }
+
     }
-
     public static class TinkerGraphGraphFeatures implements Features.GraphFeatures {
-        static final TinkerGraphGraphFeatures INSTANCE = new TinkerGraphGraphFeatures();
 
+        static final TinkerGraphGraphFeatures INSTANCE = new TinkerGraphGraphFeatures();
         private TinkerGraphGraphFeatures() {
         }
 
@@ -295,6 +335,7 @@ public class TinkerGraph implements Graph {
         public boolean supportsThreadedTransactions() {
             return false;
         }
+
     }
 
     ///////////// GRAPH SPECIFIC INDEXING METHODS ///////////////
@@ -351,6 +392,139 @@ public class TinkerGraph implements Graph {
             return null == this.edgeIndex ? Collections.emptySet() : this.edgeIndex.getIndexedKeys();
         } else {
             throw new IllegalArgumentException("Class is not indexable: " + elementClass);
+        }
+    }
+
+    /**
+     * Construct an {@link TinkerGraph.IdManager} from the TinkerGraph {@link Configuration}.
+     */
+    private static IdManager<?> selectIdManager(final Configuration config, final String configKey, final Class<? extends Element> clazz) {
+        final String vertexIdManagerConfigValue = config.getString(configKey, DefaultIdManager.ANY.name());
+        try {
+            return DefaultIdManager.valueOf(vertexIdManagerConfigValue);
+        } catch (IllegalArgumentException iae) {
+            try {
+                return (IdManager) Class.forName(vertexIdManagerConfigValue).newInstance();
+            } catch (Exception ex) {
+                throw new IllegalStateException(String.format("Could not configure TinkerGraph %s id manager with %s", clazz.getSimpleName(), vertexIdManagerConfigValue));
+            }
+        }
+    }
+
+    /**
+     * TinkerGraph will use an implementation of this interface to generate identifiers when a user does not supply
+     * them and to handle identifier conversions when querying to provide better flexibility with respect to
+     * handling different data types that mean the same thing.  For example, the
+     * {@link DefaultIdManager#LONG} implementation will allow {@code g.vertices(1l, 2l)} and
+     * {@code g.vertices(1, 2)} to both return values.
+     *
+     * @param <T> the id type
+     */
+    public interface IdManager<T> {
+        /**
+         * Generate an identifier which should be unique to the {@link TinkerGraph} instance.
+         */
+        T getNextId(final TinkerGraph graph);
+
+        /**
+         * Convert an identifier to the type required by the manager.
+         */
+        T convert(final Object id);
+    }
+
+    /**
+     * A default set of {@link IdManager} implementations for common identifier types.
+     */
+    public enum DefaultIdManager implements IdManager {
+        /**
+         * Manages identifiers of type {@code Long}. Will convert any class that extends from {@link Number} to a
+         * {@link Long} and will also attempt to convert {@code String} values
+         */
+        LONG {
+            @Override
+            public Long getNextId(final TinkerGraph graph) {
+                return Stream.generate(() -> (graph.currentId.incrementAndGet())).filter(id -> !graph.vertices.containsKey(id) && !graph.edges.containsKey(id)).findAny().get();
+            }
+
+            @Override
+            public Object convert(final Object id) {
+                if (null == id)
+                    return null;
+                else if (id instanceof Long)
+                    return id;
+                else if (id instanceof Number)
+                    return ((Number) id).longValue();
+                else if (id instanceof String)
+                    return Long.parseLong((String) id);
+                else
+                    throw new IllegalArgumentException(String.format("Expected an id that is convertible to Long but received %s", id.getClass()));
+            }
+        },
+
+        /**
+         * Manages identifiers of type {@code Integer}. Will convert any class that extends from {@link Number} to a
+         * {@link Integer} and will also attempt to convert {@code String} values
+         */
+        INTEGER {
+            @Override
+            public Integer getNextId(final TinkerGraph graph) {
+                return Stream.generate(() -> (graph.currentId.incrementAndGet())).map(Long::intValue).filter(id -> !graph.vertices.containsKey(id) && !graph.edges.containsKey(id)).findAny().get();
+            }
+
+            @Override
+            public Object convert(final Object id) {
+                if (null == id)
+                    return null;
+                else if (id instanceof Integer)
+                    return id;
+                else if (id instanceof Number)
+                    return ((Number) id).intValue();
+                else if (id instanceof String)
+                    return Integer.parseInt((String) id);
+                else
+                    throw new IllegalArgumentException(String.format("Expected an id that is convertible to Integer but received %s", id.getClass()));
+            }
+        },
+
+        /**
+         * Manages identifiers of type {@link java.util.UUID}. Will convert {@code String} values to
+         * {@link java.util.UUID}.
+         */
+        UUID {
+            @Override
+            public UUID getNextId(final TinkerGraph graph) {
+                return java.util.UUID.randomUUID();
+            }
+
+            @Override
+            public Object convert(final Object id) {
+                if (null == id)
+                    return null;
+                else if (id instanceof java.util.UUID)
+                    return id;
+                else if (id instanceof String)
+                    return java.util.UUID.fromString((String) id);
+                else
+                    throw new IllegalArgumentException(String.format("Expected an id that is convertible to UUID but received %s", id.getClass()));
+            }
+        },
+
+        /**
+         * Manages identifiers of any type.  This represents the default way {@link TinkerGraph} has always worked.
+         * In other words, there is no identifier conversion so if the identifier of a vertex is a {@code Long}, then
+         * trying to request it with an {@code Integer} will have no effect. Also, like the original
+         * {@link TinkerGraph}, it will generate {@link Long} values for identifiers.
+         */
+        ANY {
+            @Override
+            public Long getNextId(final TinkerGraph graph) {
+                return Stream.generate(() -> (graph.currentId.incrementAndGet())).filter(id -> !graph.vertices.containsKey(id) && !graph.edges.containsKey(id)).findAny().get();
+            }
+
+            @Override
+            public Object convert(final Object id) {
+                return id;
+            }
         }
     }
 }

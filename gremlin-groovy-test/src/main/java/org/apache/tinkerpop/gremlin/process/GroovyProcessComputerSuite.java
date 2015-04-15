@@ -22,6 +22,7 @@ import org.apache.tinkerpop.gremlin.AbstractGremlinTest;
 import org.apache.tinkerpop.gremlin.GraphManager;
 import org.apache.tinkerpop.gremlin.groovy.loaders.SugarLoader;
 import org.apache.tinkerpop.gremlin.groovy.util.SugarTestHelper;
+import org.apache.tinkerpop.gremlin.process.computer.GraphComputer;
 import org.apache.tinkerpop.gremlin.process.computer.ranking.PageRankVertexProgramTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.branch.GroovyBranchTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.branch.GroovyChooseTest;
@@ -41,7 +42,6 @@ import org.apache.tinkerpop.gremlin.process.traversal.step.filter.GroovyRangeTes
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.GroovySampleTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.GroovySimplePathTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.GroovyWhereTest;
-import org.apache.tinkerpop.gremlin.process.traversal.step.map.GroovyBackTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.GroovyCoalesceTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.GroovyCountTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.GroovyFoldTest;
@@ -66,10 +66,20 @@ import org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect.GroovySack
 import org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect.GroovySideEffectCapTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect.GroovyStoreTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect.GroovyTreeTest;
+import org.apache.tinkerpop.gremlin.structure.Graph;
+import org.apache.tinkerpop.gremlin.structure.StructureStandardSuite;
 import org.junit.runners.model.InitializationError;
 import org.junit.runners.model.RunnerBuilder;
 
 /**
+ * The {@code GroovyProcessComputerSuite} is a JUnit test runner that executes the Gremlin Test Suite over a
+ * {@link Graph} implementation.  This test suite covers traversal operations around {@link GraphComputer} and should
+ * be implemented by vendors to validate that their implementations are compliant with the Groovy flavor of the
+ * Gremlin language. Implementations that use this test suite should return {@code true} for
+ * {@link Graph.Features.GraphFeatures#supportsComputer()}.
+ * <br/>
+ * For more information on the usage of this suite, please see {@link StructureStandardSuite}.
+ *
  * @author Stephen Mallette (http://stephen.genoprime.com)
  */
 public class GroovyProcessComputerSuite extends ProcessComputerSuite {
@@ -78,7 +88,7 @@ public class GroovyProcessComputerSuite extends ProcessComputerSuite {
      * This list of tests in the suite that will be executed.  Gremlin developers should add to this list
      * as needed to enforce tests upon implementations.
      */
-    private static final Class<?>[] testsToExecute = new Class<?>[]{
+    private static final Class<?>[] allTests = new Class<?>[]{
 
             //branch
             GroovyBranchTest.ComputerTraversals.class,
@@ -105,7 +115,6 @@ public class GroovyProcessComputerSuite extends ProcessComputerSuite {
             GroovyWhereTest.ComputerTraversals.class,
 
             // map
-            GroovyBackTest.ComputerTraversals.class,
             GroovyCoalesceTest.ComputerTraversals.class,
             GroovyCountTest.ComputerTraversals.class,
             GroovyFoldTest.ComputerTraversals.class,
@@ -143,7 +152,7 @@ public class GroovyProcessComputerSuite extends ProcessComputerSuite {
     };
 
     public GroovyProcessComputerSuite(final Class<?> klass, final RunnerBuilder builder) throws InitializationError {
-        super(klass, builder, testsToExecute, testsToExecute);
+        super(klass, builder, allTests);
     }
 
     @Override

@@ -46,7 +46,6 @@ import org.apache.tinkerpop.gremlin.process.traversal.step.filter.SimplePathTest
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.WhereTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.AddEdgeTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.AddVertexTest;
-import org.apache.tinkerpop.gremlin.process.traversal.step.map.BackTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.CoalesceTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.CountTest;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.FoldTest;
@@ -77,47 +76,29 @@ import org.apache.tinkerpop.gremlin.process.traversal.step.util.PathTest;
 import org.apache.tinkerpop.gremlin.process.traversal.strategy.decoration.ElementIdStrategyProcessTest;
 import org.apache.tinkerpop.gremlin.process.traversal.strategy.decoration.EventStrategyProcessTest;
 import org.apache.tinkerpop.gremlin.process.traversal.strategy.decoration.PartitionStrategyProcessTest;
-import org.apache.tinkerpop.gremlin.process.traversal.strategy.verification.ReadOnlyStrategyProcessTest;
 import org.apache.tinkerpop.gremlin.process.traversal.strategy.decoration.SubgraphStrategyProcessTest;
+import org.apache.tinkerpop.gremlin.process.traversal.strategy.verification.ReadOnlyStrategyProcessTest;
 import org.apache.tinkerpop.gremlin.process.traversal.strategy.verification.TraversalVerificationStrategyTest;
+import org.apache.tinkerpop.gremlin.structure.Graph;
+import org.apache.tinkerpop.gremlin.structure.StructureStandardSuite;
 import org.junit.runners.model.InitializationError;
 import org.junit.runners.model.RunnerBuilder;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
  * The {@code ProcessStandardSuite} is a JUnit test runner that executes the Gremlin Test Suite over a
- * {@link org.apache.tinkerpop.gremlin.structure.Graph} implementation.  This specialized test suite and runner is for use
- * by Gremlin implementers to test their {@link org.apache.tinkerpop.gremlin.structure.Graph} implementations.  The
- * {@code ProcessStandardSuite} ensures consistency and validity of the implementations that they test.
- * <p/>
- * To use the {@code ProcessStandardSuite} define a class in a test module.  Simple naming would expect the name of the
- * implementation followed by "ProcessStandardSuite".  This class should be annotated as follows (note that the "Suite"
- * implements {@link org.apache.tinkerpop.gremlin.GraphProvider} as a convenience only. It could be implemented in a
- * separate class file):
- * <p/>
- * <code>
+ * {@link Graph} implementation.  This test suite covers traversal operations and should be implemented by vendors
+ * to validate that their implementations are compliant with the Gremlin language.
+ * <br/>
+ * For more information on the usage of this suite, please see {@link StructureStandardSuite}.
  *
  * @author Stephen Mallette (http://stephen.genoprime.com)
- * @RunWith(ProcessStandardSuite.class)
- * @ProcessStandardSuite.GraphProviderClass(TinkerGraphProcessStandardTest.class) public class TinkerGraphProcessStandardTest implements GraphProvider {
- * }
- * </code>
- * <p/>
- * Implementing {@link org.apache.tinkerpop.gremlin.GraphProvider} provides a way for the {@code ProcessStandardSuite} to
- * instantiate {@link org.apache.tinkerpop.gremlin.structure.Graph} instances from the implementation being tested to inject
- * into tests in the suite.  The ProcessStandardSuite will utilized
- * {@link org.apache.tinkerpop.gremlin.structure.Graph.Features} defined in the suite to determine which tests will be executed.
- * <br/>
  */
 public class ProcessStandardSuite extends AbstractGremlinSuite {
 
     /**
-     * This list of tests in the suite that will be executed.  Gremlin developers should add to this list
-     * as needed to enforce tests upon implementations.
+     * This list of tests in the suite that will be executed as part of this suite.
      */
     private static final Class<?>[] allTests = new Class<?>[]{
             // branch
@@ -133,7 +114,7 @@ public class ProcessStandardSuite extends AbstractGremlinSuite {
             CyclicPathTest.Traversals.class,
             DedupTest.Traversals.class,
             DropTest.Traversals.class,
-            ExceptTest.StandardTest.class,
+            ExceptTest.Traversals.class,
             FilterTest.Traversals.class,
             HasNotTest.Traversals.class,
             HasTest.Traversals.class,
@@ -148,7 +129,6 @@ public class ProcessStandardSuite extends AbstractGremlinSuite {
             // map
             AddEdgeTest.Traversals.class,
             AddVertexTest.Traversals.class,
-            BackTest.Traversals.class,
             CoalesceTest.Traversals.class,
             CountTest.Traversals.class,
             FoldTest.Traversals.class,
@@ -181,6 +161,7 @@ public class ProcessStandardSuite extends AbstractGremlinSuite {
 
             // util
             TraversalSideEffectsTest.Traversals.class,
+            org.apache.tinkerpop.gremlin.process.traversal.step.util.PathTest.class,
 
             // compliance
             CoreTraversalTest.class,
@@ -201,34 +182,85 @@ public class ProcessStandardSuite extends AbstractGremlinSuite {
     };
 
     /**
-     * This list of tests in the suite that will be executed.  Gremlin developers should add to this list
-     * as needed to enforce tests upon implementations.
+     * A list of the minimum set of base tests that Gremlin flavors should implement to be compliant with Gremlin.
      */
-    private static final Class<?>[] testsToExecute;
+    private static final Class<?>[] testsToEnforce = new Class<?>[]{
+            // branch
+            BranchTest.class,
+            ChooseTest.class,
+            LocalTest.class,
+            RepeatTest.class,
+            UnionTest.class,
 
-    static {
-        final String override = System.getenv().getOrDefault("gremlin.tests", "");
-        if (override.equals(""))
-            testsToExecute = allTests;
-        else {
-            final List<String> filters = Arrays.asList(override.split(","));
-            final List<Class<?>> allowed = Stream.of(allTests)
-                    .filter(c -> filters.contains(c.getName()))
-                    .collect(Collectors.toList());
-            testsToExecute = allowed.toArray(new Class<?>[allowed.size()]);
-        }
-    }
+            // filter
+            AndTest.class,
+            CoinTest.class,
+            CyclicPathTest.class,
+            DedupTest.class,
+            DropTest.class,
+            ExceptTest.class,
+            FilterTest.class,
+            HasNotTest.class,
+            HasTest.class,
+            IsTest.class,
+            OrTest.class,
+            RangeTest.class,
+            RetainTest.class,
+            SampleTest.class,
+            SimplePathTest.class,
+            WhereTest.class,
 
+            // map
+            AddEdgeTest.class,
+            AddVertexTest.class,
+            CoalesceTest.class,
+            CountTest.class,
+            FoldTest.class,
+            MapTest.class,
+            MatchTest.class,
+            MaxTest.class,
+            MeanTest.class,
+            MinTest.class,
+            SumTest.class,
+            OrderTest.class,
+            org.apache.tinkerpop.gremlin.process.traversal.step.map.PathTest.class,   // note that there are two PathTest in this suite - only one is enforce
+            PropertiesTest.class,
+            SelectTest.class,
+            VertexTest.class,
+            UnfoldTest.class,
+            ValueMapTest.class,
+
+            // sideEffect
+            AggregateTest.class,
+            GroupTest.class,
+            GroupCountTest.class,
+            InjectTest.class,
+            ProfileTest.class,
+            SackTest.class,
+            SideEffectCapTest.class,
+            SideEffectTest.class,
+            StoreTest.class,
+            SubgraphTest.class,
+            TreeTest.class,
+
+            // util
+            TraversalSideEffectsTest.class
+    };
+
+    /**
+     * This constructor is used by JUnit and will run this suite with its concrete implementations of the
+     * {@code testsToEnforce}.
+     */
     public ProcessStandardSuite(final Class<?> klass, final RunnerBuilder builder) throws InitializationError {
-        super(klass, builder, testsToExecute, testsToExecute);
+        super(klass, builder, allTests, testsToEnforce, false, TraversalEngine.Type.STANDARD);
     }
 
-    public ProcessStandardSuite(final Class<?> klass, final RunnerBuilder builder, final Class<?>[] testsToExecute, final Class<?>[] testsToEnforce) throws InitializationError {
-        super(klass, builder, testsToExecute, testsToEnforce);
-    }
-
-    public ProcessStandardSuite(final Class<?> klass, final RunnerBuilder builder, final Class<?>[] testsToExecute, final Class<?>[] testsToEnforce, final boolean gremlinFlavorSuite) throws InitializationError {
-        super(klass, builder, testsToExecute, testsToEnforce, gremlinFlavorSuite, TraversalEngine.Type.STANDARD);
+    /**
+     * This constructor is used by Gremlin flavor implementers who supply their own implementations of the
+     * {@code testsToEnforce}.
+     */
+    public ProcessStandardSuite(final Class<?> klass, final RunnerBuilder builder, final Class<?>[] testsToExecute) throws InitializationError {
+        super(klass, builder, testsToExecute, testsToEnforce, true, TraversalEngine.Type.STANDARD);
     }
 
     @Override

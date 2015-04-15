@@ -23,15 +23,20 @@ Documentation
 ~~~~~~~~~~~~~
 
 * link:http://tinkerpop.incubator.apache.org/[homepage]
-* link:http://tinkerpop.incubator.apache.org/docs/3.0.0.M8/[user documentation]
-* link:http://tinkerpop.incubator.apache.org/javadocs/3.0.0.M8/core/[core javadoc]
-* link:http://tinkerpop.incubator.apache.org/javadocs/3.0.0.M8/full/[full javadoc]
+* link:http://tinkerpop.incubator.apache.org/docs/3.0.0-SNAPSHOT/[user documentation]
+* link:http://tinkerpop.incubator.apache.org/javadocs/3.0.0-SNAPSHOT/core/[core javadoc]
+* link:http://tinkerpop.incubator.apache.org/javadocs/3.0.0-SNAPSHOT/full/[full javadoc]
 
 Building and Testing
 ~~~~~~~~~~~~~~~~~~~~
 
 * Build Project: `mvn clean install`
-** Specify specific tests in a TinkerPop Suite to run: `mvn test -Dgremlin.tests={test class 1, test class 2...}` - note that including a specific test may require its inner class implementation (e.g. `org.apache.tinkerpop.gremlin....UnionTest$ComputerTest`)
+** Specify specific tests in a TinkerPop Suite to run with the `GREMLIN_TESTS` environment variable, along with the Maven project list argument, e.g.:
++
+----
+export GREMLIN_TESTS='org.apache.tinkerpop.gremlin.process.traversal.step.map.PathTest$Traversals,org.apache.tinkerpop.gremlin.process.traversal.step.util.PathTest'
+mvn -Dmaven.javadoc.skip=true --projects tinkergraph-gremlin test
+----
 ** Clean the `.groovy/grapes/org.apache.tinkerpop` directory on build: `mvn clean install -DcleanGrapes`
 * Regenerate test data (only necessary given changes to IO classes): `mvn clean install -Dio` from `tinkergraph-gremlin` directory
 * Check license headers are present: `mvn apache-rat:check`
@@ -98,4 +103,4 @@ TinkerPop3 uses Apache JIRA as its link:https://issues.apache.org/jira/browse/TI
 ** If the issue is a `bug` then the "priority" should be `critical`.
 ** If the issue is an `improvement` then the "priority should be `major`.
 * Issues are not assigned "labels".
-* Until there is an official release "affected versionq" should be left empty.
+* Until there is an official release "affected version" should be left empty.

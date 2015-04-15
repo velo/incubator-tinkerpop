@@ -46,22 +46,18 @@ public final class TinkerHelper {
     private TinkerHelper() {
     }
 
-    protected final synchronized static long getNextId(final TinkerGraph graph) {
-        return Stream.generate(() -> (++graph.currentId)).filter(id -> !graph.vertices.containsKey(id) && !graph.edges.containsKey(id)).findAny().get();
-    }
-
     protected static Edge addEdge(final TinkerGraph graph, final TinkerVertex outVertex, final TinkerVertex inVertex, final String label, final Object... keyValues) {
         ElementHelper.validateLabel(label);
         ElementHelper.legalPropertyKeyValueArray(keyValues);
 
-        Object idValue = ElementHelper.getIdValue(keyValues).orElse(null);
+        Object idValue = graph.edgeIdManager.convert(ElementHelper.getIdValue(keyValues).orElse(null));
 
         final Edge edge;
         if (null != idValue) {
             if (graph.edges.containsKey(idValue))
                 throw Graph.Exceptions.edgeWithIdAlreadyExists(idValue);
         } else {
-            idValue = TinkerHelper.getNextId(graph);
+            idValue = graph.edgeIdManager.getNextId(graph);
         }
 
         edge = new TinkerEdge(idValue, outVertex, label, inVertex);

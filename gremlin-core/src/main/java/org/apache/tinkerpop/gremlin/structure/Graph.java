@@ -19,10 +19,10 @@
 package org.apache.tinkerpop.gremlin.structure;
 
 import org.apache.commons.configuration.Configuration;
-import org.apache.tinkerpop.gremlin.process.traversal.T;
-import org.apache.tinkerpop.gremlin.process.traversal.TraversalSource;
-import org.apache.tinkerpop.gremlin.process.traversal.TraversalEngine;
 import org.apache.tinkerpop.gremlin.process.computer.GraphComputer;
+import org.apache.tinkerpop.gremlin.process.traversal.T;
+import org.apache.tinkerpop.gremlin.process.traversal.TraversalEngine;
+import org.apache.tinkerpop.gremlin.process.traversal.TraversalSource;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.apache.tinkerpop.gremlin.process.traversal.engine.StandardTraversalEngine;
 import org.apache.tinkerpop.gremlin.structure.io.DefaultIo;
@@ -108,14 +108,6 @@ public interface Graph extends AutoCloseable {
         }
     }
 
-    public static <G extends Graph> G empty(final Class<G> graphClass) {
-        try {
-            return (G) graphClass.getMethod("empty").invoke(null);
-        } catch (final Exception e) {
-            throw new IllegalArgumentException(e.getMessage(), e);
-        }
-    }
-
     /**
      * Add a {@link Vertex} to the graph given an optional series of key/value pairs.  These key/values
      * must be provided in an even number where the odd numbered arguments are {@link String} property keys and the
@@ -132,7 +124,6 @@ public interface Graph extends AutoCloseable {
      * @param label the label of the vertex
      * @return The newly created labeled vertex
      */
-    @Graph.Helper
     public default Vertex addVertex(final String label) {
         return this.addVertex(T.label, label);
     }
@@ -149,8 +140,8 @@ public interface Graph extends AutoCloseable {
 
     public GraphComputer compute() throws IllegalArgumentException;
 
-    public default <C extends TraversalSource> C traversal(final TraversalSource.Builder<C> contextBuilder) {
-        return contextBuilder.create(this);
+    public default <C extends TraversalSource> C traversal(final TraversalSource.Builder<C> sourceBuilder) {
+        return sourceBuilder.create(this);
     }
 
     public default GraphTraversalSource traversal() {
@@ -158,7 +149,49 @@ public interface Graph extends AutoCloseable {
     }
 
     /**
-     * Get the {@link Vertex} objects in this graph with the provided vertex ids. If no ids are provided, get all vertices.
+     * Get the {@link Vertex} objects in this graph with the provided vertex ids. If no ids are provided, get all
+     * vertices.  Note that a vertex identifier does not need to correspond to the actual id used in the graph.  It
+     * needs to be a bit more flexible than that in that given the {@link Graph.Features} around id support, multiple
+     * arguments might be applicable here.
+     * <br/>
+     * If the graph return {@code true} for {@link Features.VertexFeatures#supportsNumericIds()} then it should support
+     * filters as with:
+     * <ul>
+     *     <li>g.vertices(v.id())</li>
+     *     <li>g.vertices(1)</li>
+     *     <li>g.vertices(1L)</li>
+     *     <li>g.vertices(1.0d)</li>
+     *     <li>g.vertices(1.0f)</li>
+     *     <li>g.vertices("1")</li>
+     * </ul>
+     * <br/>
+     * If the graph return {@code true} for {@link Features.VertexFeatures#supportsCustomIds()} ()} then it should support
+     * filters as with:
+     * <ul>
+     *     <li>g.vertices(v.id())</li>
+     *     <li>g.vertices(v.id().toString())</li>
+     * </ul>
+     * <br/>
+     * If the graph return {@code true} for {@link Features.VertexFeatures#supportsAnyIds()} ()} then it should support
+     * filters as with:
+     * <ul>
+     *     <li>g.vertices(v.id())</li>
+     * </ul>
+     * <br/>
+     * If the graph return {@code true} for {@link Features.VertexFeatures#supportsStringIds()} ()} then it should support
+     * filters as with:
+     * <ul>
+     *     <li>g.vertices(v)</li>
+     *     <li>g.vertices(v.id().toString())</li>
+     *     <li>g.vertices("id")</li>
+     * </ul>
+     * <br/>
+     * If the graph return {@code true} for {@link Features.EdgeFeatures#supportsStringIds()} ()} then it should support
+     * filters as with:
+     * <ul>
+     *     <li>g.vertices(v.id().toString())</li>
+     *     <li>g.vertices("id")</li>
+     * </ul>
      *
      * @param vertexIds the ids of the vertices to get
      * @return an {@link Iterator} of vertices that match the provided vertex ids
@@ -167,6 +200,40 @@ public interface Graph extends AutoCloseable {
 
     /**
      * Get the {@link Edge} objects in this graph with the provided edge ids. If no ids are provided, get all edges.
+     * Note that an edge identifier does not need to correspond to the actual id used in the graph.  It
+     * needs to be a bit more flexible than that in that given the {@link Graph.Features} around id support, multiple
+     * arguments might be applicable here.
+     * <br/>
+     * If the graph return {@code true} for {@link Features.EdgeFeatures#supportsNumericIds()} then it should support
+     * filters as with:
+     * <ul>
+     *     <li>g.edges(e.id())</li>
+     *     <li>g.edges(1)</li>
+     *     <li>g.edges(1L)</li>
+     *     <li>g.edges(1.0d)</li>
+     *     <li>g.edges(1.0f)</li>
+     *     <li>g.edges("1")</li>
+     * </ul>
+     * <br/>
+     * If the graph return {@code true} for {@link Features.EdgeFeatures#supportsCustomIds()} ()} then it should support
+     * filters as with:
+     * <ul>\
+     *     <li>g.edges(e.id())</li>
+     *     <li>g.edges(e.id().toString())</li>
+     * </ul>
+     * <br/>
+     * If the graph return {@code true} for {@link Features.EdgeFeatures#supportsAnyIds()} ()} then it should support
+     * filters as with:
+     * <ul>
+     *     <li>g.edges(e.id())</li>
+     * </ul>
+     * <br/>
+     * If the graph return {@code true} for {@link Features.EdgeFeatures#supportsStringIds()} ()} then it should support
+     * filters as with:
+     * <ul>
+     *     <li>g.edges(e.id().toString())</li>
+     *     <li>g.edges("id")</li>
+     * </ul>
      *
      * @param edgeIds the ids of the edges to get
      * @return an {@link Iterator} of edges that match the provided edge ids
@@ -373,7 +440,6 @@ public interface Graph extends AutoCloseable {
         /**
          * Gets the variables of the {@link Graph} as a {@code Map}.
          */
-        @Graph.Helper
         public default Map<String, Object> asMap() {
             final Map<String, Object> map = keys().stream()
                     .map(key -> Pair.with(key, get(key).get()))
@@ -382,6 +448,9 @@ public interface Graph extends AutoCloseable {
         }
 
         public static class Exceptions {
+
+            private Exceptions() {
+            }
 
             public static IllegalArgumentException variableKeyCanNotBeEmpty() {
                 return new IllegalArgumentException("Graph variable key can not be the empty string");
@@ -622,7 +691,7 @@ public interface Graph extends AutoCloseable {
             }
 
             /**
-             * Determines if an {@link Element} has numeric identifiers.
+             * Determines if an {@link Element} has numeric identifiers as their internal representation.
              */
             @FeatureDescriptor(name = FEATURE_NUMERIC_IDS)
             public default boolean supportsNumericIds() {
@@ -630,7 +699,7 @@ public interface Graph extends AutoCloseable {
             }
 
             /**
-             * Determines if an {@link Element} has string identifiers.
+             * Determines if an {@link Element} has string identifiers as their internal representation.
              */
             @FeatureDescriptor(name = FEATURE_STRING_IDS)
             public default boolean supportsStringIds() {
@@ -638,7 +707,7 @@ public interface Graph extends AutoCloseable {
             }
 
             /**
-             * Determines if an {@link Element} has UUID identifiers.
+             * Determines if an {@link Element} has UUID identifiers as their internal representation.
              */
             @FeatureDescriptor(name = FEATURE_UUID_IDS)
             public default boolean supportsUuidIds() {
@@ -646,8 +715,7 @@ public interface Graph extends AutoCloseable {
             }
 
             /**
-             * Determines if an {@link Element} has mapper identifiers where "mapper" refers to an implementation
-             * defined object.
+             * Determines if an {@link Element} has a specific custom object as their internal representation.
              */
             @FeatureDescriptor(name = FEATURE_CUSTOM_IDS)
             public default boolean supportsCustomIds() {
@@ -655,7 +723,8 @@ public interface Graph extends AutoCloseable {
             }
 
             /**
-             * Determines if an {@link Element} any Java object is a suitable identifier.
+             * Determines if an {@link Element} any Java object is a suitable identifier.  Note that this
+             * setting can only return true if {@link #supportsUserSuppliedIds()} is true.
              */
             @FeatureDescriptor(name = FEATURE_ANY_IDS)
             public default boolean supportsAnyIds() {
@@ -701,7 +770,7 @@ public interface Graph extends AutoCloseable {
             }
 
             /**
-             * Determines if an {@link VertexProperty} has numeric identifiers.
+             * Determines if an {@link VertexProperty} has numeric identifiers as their internal representation.
              */
             @FeatureDescriptor(name = FEATURE_NUMERIC_IDS)
             public default boolean supportsNumericIds() {
@@ -709,7 +778,7 @@ public interface Graph extends AutoCloseable {
             }
 
             /**
-             * Determines if an {@link VertexProperty} has string identifiers.
+             * Determines if an {@link VertexProperty} has string identifiers as their internal representation.
              */
             @FeatureDescriptor(name = FEATURE_STRING_IDS)
             public default boolean supportsStringIds() {
@@ -717,7 +786,7 @@ public interface Graph extends AutoCloseable {
             }
 
             /**
-             * Determines if an {@link VertexProperty} has UUID identifiers.
+             * Determines if an {@link VertexProperty} has UUID identifiers as their internal representation.
              */
             @FeatureDescriptor(name = FEATURE_UUID_IDS)
             public default boolean supportsUuidIds() {
@@ -725,8 +794,7 @@ public interface Graph extends AutoCloseable {
             }
 
             /**
-             * Determines if an {@link VertexProperty} has mapper identifiers where "mapper" refers to an implementation
-             * defined object.
+             * Determines if an {@link VertexProperty} has a specific custom object as their internal representation.
              */
             @FeatureDescriptor(name = FEATURE_CUSTOM_IDS)
             public default boolean supportsCustomIds() {
@@ -734,7 +802,8 @@ public interface Graph extends AutoCloseable {
             }
 
             /**
-             * Determines if an {@link VertexProperty} any Java object is a suitable identifier.
+             * Determines if an {@link VertexProperty} any Java object is a suitable identifier.  Note that this
+             * setting can only return true if {@link #supportsUserSuppliedIds()} is true.
              */
             @FeatureDescriptor(name = FEATURE_ANY_IDS)
             public default boolean supportsAnyIds() {
@@ -1141,17 +1210,5 @@ public interface Graph extends AutoCloseable {
     @Inherited
     public @interface OptOuts {
         OptOut[] value();
-    }
-
-    /**
-     * Defines a method as a "helper method".  These methods will usually be default methods in the
-     * core structure interfaces.  Any method marked with this annotation represent methods that should not
-     * be implemented by vendors.  The test suite will enforce this convention and create a failure situation
-     * if violated.
-     */
-    @Retention(RetentionPolicy.RUNTIME)
-    @Target(ElementType.METHOD)
-    @Inherited
-    public @interface Helper {
     }
 }

@@ -27,6 +27,7 @@ import org.apache.tinkerpop.gremlin.structure.Edge;
 import org.apache.tinkerpop.gremlin.structure.Graph;
 import org.apache.tinkerpop.gremlin.structure.Property;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
+import org.apache.tinkerpop.gremlin.structure.VertexProperty;
 import org.apache.tinkerpop.gremlin.structure.io.graphson.GraphSONTokens;
 import org.apache.tinkerpop.gremlin.tinkergraph.structure.TinkerFactory;
 import org.apache.tinkerpop.gremlin.tinkergraph.structure.TinkerGraph;
@@ -172,7 +173,7 @@ public class JsonMessageSerializerGremlinV1d0Test {
         friends.add(5);
         friends.add(map);
 
-        v.property("friends", friends);
+        v.property(VertexProperty.Cardinality.single, "friends", friends);
 
         final List list = IteratorUtils.list(graph.vertices());
 
@@ -183,7 +184,7 @@ public class JsonMessageSerializerGremlinV1d0Test {
         assertEquals(1, vertexList.size());
 
         final Map<String, Object> deserializedVertex = vertexList.get(0);
-        assertEquals(0l, deserializedVertex.get(GraphSONTokens.ID));
+        assertEquals(v.id(), deserializedVertex.get(GraphSONTokens.ID));
         assertEquals(Vertex.DEFAULT_LABEL, deserializedVertex.get(GraphSONTokens.LABEL));
 
         final Map<String, Object> properties = (Map<String, Object>) deserializedVertex.get(GraphSONTokens.PROPERTIES);

@@ -18,16 +18,18 @@
  */
 package org.apache.tinkerpop.gremlin.hadoop.groovy.plugin
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.*
+import org.apache.hadoop.io.IOUtils
+import org.apache.hadoop.io.Text
 import org.apache.tinkerpop.gremlin.hadoop.structure.hdfs.HDFSTools
 import org.apache.tinkerpop.gremlin.hadoop.structure.hdfs.HiddenFileFilter
 import org.apache.tinkerpop.gremlin.hadoop.structure.hdfs.TextIterator
 import org.apache.tinkerpop.gremlin.hadoop.structure.io.ObjectWritable
 import org.apache.tinkerpop.gremlin.hadoop.structure.io.ObjectWritableIterator
-import org.apache.tinkerpop.gremlin.util.StreamFactory
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.*
-import org.apache.hadoop.io.IOUtils
-import org.apache.hadoop.io.Text
+import org.apache.tinkerpop.gremlin.hadoop.structure.io.VertexWritable
+import org.apache.tinkerpop.gremlin.hadoop.structure.io.VertexWritableIterator
+import org.apache.tinkerpop.gremlin.util.iterator.IteratorUtils
 
 /**
  * @author Marko A. Rodriguez (http://markorodriguez.com)
@@ -100,33 +102,37 @@ class HadoopLoader {
         }
 
         FileSystem.metaClass.head = { final String path, final long totalLines ->
-            return ((FileSystem) delegate).head(path, Long.MAX_VALUE, Text.class);
+            return headMaker((FileSystem) delegate, path, totalLines, Text.class);
         }
 
         FileSystem.metaClass.head = { final String path ->
-            return ((FileSystem) delegate).head(path, Long.MAX_VALUE, Text.class);
+            return headMaker((FileSystem) delegate, path, Long.MAX_VALUE, Text.class);
         }
 
         FileSystem.metaClass.head = {
             final String path, final Class<org.apache.hadoop.io.Writable> writableClass ->
-                return ((FileSystem) delegate).head(path, Long.MAX_VALUE, writableClass);
+                return headMaker((FileSystem) delegate, path, Long.MAX_VALUE, writableClass);
         }
 
         FileSystem.metaClass.head = {
-            final String path, final long totalKeyValues, final Class<org.apache.hadoop.io.Writable> writableClass ->
-                // if(writableClass.equals(org.apache.giraph.graph.Vertex.class)) {
-                /// return StreamFactory.stream(new GiraphVertexIterator(((FileSystem) delegate).getConf(), new Path(path))).limit(totalKeyValues).iterator();
-                // } else
-                if (writableClass.equals(ObjectWritable.class)) {
-                    return StreamFactory.stream(new ObjectWritableIterator(((FileSystem) delegate).getConf(), new Path(path))).limit(totalKeyValues).iterator();
-                } else {
-                    return StreamFactory.stream(new TextIterator(((FileSystem) delegate).getConf(), new Path(path))).limit(totalKeyValues).iterator();
-                }
+            final String path, final long totalLines, final Class<org.apache.hadoop.io.Writable> writableClass ->
+                return headMaker((FileSystem) delegate, path, totalLines, writableClass);
         }
 
         /*FileSystem.metaClass.unzip = { final String from, final String to, final boolean deleteZip ->
             HDFSTools.decompressPath((FileSystem) delegate, from, to, Tokens.BZ2, deleteZip);
         }*/
 
+    }
+
+    private static Iterator headMaker(
+            final FileSystem fs,
+            final String path, final long totalLines, final Class<org.apache.hadoop.io.Writable> writableClass) {
+        if (writableClass.equals(ObjectWritable.class))
+            return IteratorUtils.limit(new ObjectWritableIterator(fs.getConf(), new Path(path)), totalLines.intValue());
+        else if (writableClass.equals(VertexWritable.class))
+            return IteratorUtils.limit(new VertexWritableIterator(fs.getConf(), new Path(path)), totalLines.intValue());
+        else
+            return IteratorUtils.limit(new TextIterator(fs.getConf(), new Path(path)), totalLines.intValue());
     }
 }

@@ -26,6 +26,7 @@ import org.apache.tinkerpop.gremlin.structure.Compare;
 import org.apache.tinkerpop.gremlin.structure.Edge;
 import org.apache.tinkerpop.gremlin.structure.Graph;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
+import org.apache.tinkerpop.gremlin.structure.VertexProperty;
 import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedEdge;
 import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedVertex;
 import org.apache.tinkerpop.gremlin.tinkergraph.structure.TinkerFactory;
@@ -171,14 +172,14 @@ public class GryoMessageSerializerV1D0Test {
         assertEquals(1, edgeList.size());
 
         final DetachedEdge deserializedEdge = edgeList.get(0);
-        assertEquals(2l, deserializedEdge.id());
+        assertEquals(e.id(), deserializedEdge.id());
         assertEquals("test", deserializedEdge.label());
 
         assertEquals(123, deserializedEdge.values("abc").next());
         assertEquals(1, IteratorUtils.count(deserializedEdge.properties()));
-        assertEquals(0l, deserializedEdge.outVertex().id());
+        assertEquals(v1.id(), deserializedEdge.outVertex().id());
         assertEquals(Vertex.DEFAULT_LABEL, deserializedEdge.outVertex().label());
-        assertEquals(1l, deserializedEdge.inVertex().id());
+        assertEquals(v2.id(), deserializedEdge.inVertex().id());
         assertEquals(Vertex.DEFAULT_LABEL, deserializedEdge.inVertex().label());
     }
 
@@ -195,7 +196,7 @@ public class GryoMessageSerializerV1D0Test {
         friends.add(5);
         friends.add(map);
 
-        v.property("friends", friends);
+        v.property(VertexProperty.Cardinality.single, "friends", friends);
 
         final List list = IteratorUtils.list(g.vertices());
 

@@ -30,6 +30,7 @@ import org.apache.tinkerpop.gremlin.structure.Element;
 import org.apache.tinkerpop.gremlin.structure.Property;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedElement;
+import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedProperty;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -46,7 +47,7 @@ public final class TraverserExecutor {
         final TraverserSet<Object> aliveTraversers = new TraverserSet<>();
         // gather incoming traversers into a traverser set and gain the 'weighted-set' optimization
         final TraversalSideEffects traversalSideEffects = traversalMatrix.getTraversal().getSideEffects();
-        messenger.receiveMessages(MessageScope.Global.instance()).forEachRemaining(traverserSet -> {
+        messenger.receiveMessages().forEachRemaining(traverserSet -> {
             traverserSet.forEach(traverser -> {
                 traverser.setSideEffects(traversalSideEffects);
                 traverser.attach(vertex);
@@ -62,7 +63,9 @@ public final class TraverserExecutor {
                 if (traverser.get() instanceof Element || traverser.get() instanceof Property) {      // GRAPH OBJECT
                     // if the element is remote, then message, else store it locally for re-processing
                     final Vertex hostingVertex = TraverserExecutor.getHostingVertex(traverser.get());
-                    if (!vertex.equals(hostingVertex) || traverser.get() instanceof DetachedElement) { // TODO: why is the DetachedElement instanceof needed?
+                    if (!vertex.equals(hostingVertex)
+                            || traverser.get() instanceof DetachedElement
+                            || traverser.get() instanceof DetachedProperty) { // necessary for path access (but why are these not ReferenceXXX?)
                         voteToHalt.set(false);
                         traverser.detach();
                         messenger.sendMessage(MessageScope.Global.of(hostingVertex), new TraverserSet<>(traverser));

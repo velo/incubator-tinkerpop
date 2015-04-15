@@ -23,6 +23,7 @@ import org.apache.tinkerpop.gremlin.AbstractGremlinTest;
 import org.apache.tinkerpop.gremlin.FeatureRequirementSet;
 import org.apache.tinkerpop.gremlin.structure.Graph;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
+import org.apache.tinkerpop.gremlin.structure.VertexProperty;
 import org.apache.tinkerpop.gremlin.util.StreamFactory;
 import org.apache.tinkerpop.gremlin.util.iterator.IteratorUtils;
 import org.junit.Test;
@@ -82,7 +83,7 @@ public class CommunityGeneratorTest {
         @Test
         @FeatureRequirementSet(FeatureRequirementSet.Package.SIMPLE)
         public void shouldGenerateDifferentGraph() throws Exception {
-            final Configuration configuration = graphProvider.newGraphConfiguration("g1", this.getClass(), name.getMethodName());
+            final Configuration configuration = graphProvider.newGraphConfiguration("g1", this.getClass(), name.getMethodName(), null);
             final Graph graph1 = graphProvider.openTestGraph(configuration);
 
             try {
@@ -111,7 +112,7 @@ public class CommunityGeneratorTest {
         @Test
         @FeatureRequirementSet(FeatureRequirementSet.Package.SIMPLE)
         public void shouldGenerateSameGraph() throws Exception {
-            final Configuration configuration = graphProvider.newGraphConfiguration("g1", this.getClass(), name.getMethodName());
+            final Configuration configuration = graphProvider.newGraphConfiguration("g1", this.getClass(), name.getMethodName(), null);
             final Graph graph1 = graphProvider.openTestGraph(configuration);
 
             try {
@@ -198,7 +199,7 @@ public class CommunityGeneratorTest {
                     .edgeProcessor(e -> e.<String>property("data", "test"))
                     .vertexProcessor((v, m) -> {
                         m.forEach(v::property);
-                        v.property("test", "data");
+                        v.property(VertexProperty.Cardinality.single, "test", "data");
                     })
                     .communityDistribution(dist)
                     .degreeDistribution(dist)

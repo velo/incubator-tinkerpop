@@ -62,7 +62,6 @@ import org.apache.tinkerpop.gremlin.process.traversal.step.filter.WhereStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.AddEdgeByPathStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.AddEdgeStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.AddVertexStep;
-import org.apache.tinkerpop.gremlin.process.traversal.step.map.BackStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.CoalesceStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.CountGlobalStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.CountLocalStep;
@@ -291,10 +290,6 @@ public interface VariableGraphTraversal<S, E> extends Traversal<S, E> {
 
     public default VariableGraphTraversal<S, Path> path() {
         return this.asAdmin().addStep(new PathStep<>(this.asAdmin()));
-    }
-
-    public default <E2> VariableGraphTraversal<S, E2> back(final String stepLabel) {
-        return this.asAdmin().addStep(new BackStep<>(this.asAdmin(), stepLabel));
     }
 
     public default <E2> VariableGraphTraversal<S, Map<String, E2>> match(final String startLabel, final Traversal... traversals) {
@@ -590,8 +585,8 @@ public interface VariableGraphTraversal<S, E> extends Traversal<S, E> {
         return this.asAdmin().addStep(new LambdaSideEffectStep<>(this.asAdmin(), consumer));
     }
 
-    public default <E2> VariableGraphTraversal<S, E2> cap(final String... sideEffectKeys) {
-        return this.asAdmin().addStep(new SideEffectCapStep<>(this.asAdmin(), sideEffectKeys));
+    public default <E2> VariableGraphTraversal<S, E2> cap(final String sideEffectKey, final String... sideEffectKeys) {
+        return this.asAdmin().addStep(new SideEffectCapStep<>(this.asAdmin(), sideEffectKey, sideEffectKeys));
     }
 
     public default VariableGraphTraversal<S, Edge> subgraph(final String sideEffectKey) {

@@ -31,9 +31,10 @@ import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.Set;
 
 import static org.junit.Assert.*;
 
@@ -41,6 +42,19 @@ import static org.junit.Assert.*;
  * @author Stephen Mallette (http://stephen.genoprime.com)
  */
 public class DetachedVertexTest extends AbstractGremlinTest {
+
+    @Test
+    @FeatureRequirementSet(FeatureRequirementSet.Package.VERTICES_ONLY)
+    public void shouldHashAndEqualCorrectly() {
+        final Vertex v = graph.addVertex();
+        final Set<Vertex> set = new HashSet<>();
+        for (int i = 0; i < 100; i++) {
+            set.add(DetachedFactory.detach(v, true));
+            set.add(DetachedFactory.detach(v, false));
+            set.add(v);
+        }
+        assertEquals(1, set.size());
+    }
 
     @Test
     @FeatureRequirementSet(FeatureRequirementSet.Package.VERTICES_ONLY)
@@ -107,12 +121,14 @@ public class DetachedVertexTest extends AbstractGremlinTest {
     @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
     public void shouldEvaluateToEqual() {
         assertTrue(DetachedFactory.detach(g.V(convertToVertexId("marko")).next(), true).equals(DetachedFactory.detach(g.V(convertToVertexId("marko")).next(), true)));
+        assertTrue(DetachedFactory.detach(g.V(convertToVertexId("marko")).next(), true).equals(g.V(convertToVertexId("marko")).next()));
     }
 
     @Test
     @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
     public void shouldHaveSameHashCode() {
         assertEquals(DetachedFactory.detach(g.V(convertToVertexId("marko")).next(), true).hashCode(), DetachedFactory.detach(g.V(convertToVertexId("marko")).next(), true).hashCode());
+        assertEquals(DetachedFactory.detach(g.V(convertToVertexId("marko")).next(), true).hashCode(), g.V(convertToVertexId("marko")).next().hashCode());
     }
 
     @Test
@@ -231,7 +247,7 @@ public class DetachedVertexTest extends AbstractGremlinTest {
     }
 
 
-    @Test(expected = UnsupportedOperationException.class)
+    @Test(expected = IllegalStateException.class)
     @FeatureRequirementSet(FeatureRequirementSet.Package.VERTICES_ONLY)
     public void shouldNotAllowAddEdge() {
         final Vertex v = graph.addVertex();
@@ -239,15 +255,15 @@ public class DetachedVertexTest extends AbstractGremlinTest {
         detachedVertex.addEdge("test", null);
     }
 
-    @Test(expected = UnsupportedOperationException.class)
+    @Test(expected = IllegalStateException.class)
     @FeatureRequirementSet(FeatureRequirementSet.Package.VERTICES_ONLY)
     public void shouldNotAllowSetProperty() {
         final Vertex v = graph.addVertex();
         final DetachedVertex detachedVertex = DetachedFactory.detach(v, true);
-        detachedVertex.property("test", "test");
+        detachedVertex.property(VertexProperty.Cardinality.single, "test", "test");
     }
 
-    @Test(expected = UnsupportedOperationException.class)
+    @Test(expected = IllegalStateException.class)
     @FeatureRequirementSet(FeatureRequirementSet.Package.VERTICES_ONLY)
     public void shouldNotAllowRemove() {
         final Vertex v = graph.addVertex();

@@ -83,6 +83,11 @@ public class TinkerVertex extends TinkerElement implements Vertex {
     }
 
     @Override
+    public <V> VertexProperty<V> property(final String key, final V value, final Object... keyValues) {
+        return this.property(VertexProperty.Cardinality.single,key,value,keyValues);
+    }
+
+    @Override
     public <V> VertexProperty<V> property(final VertexProperty.Cardinality cardinality, final String key, final V value, final Object... keyValues) {
         if (this.removed) throw Element.Exceptions.elementAlreadyRemoved(Vertex.class, this.id);
         ElementHelper.legalPropertyKeyValueArray(keyValues);
@@ -92,13 +97,16 @@ public class TinkerVertex extends TinkerElement implements Vertex {
         if (optionalVertexProperty.isPresent()) return optionalVertexProperty.get();
 
         if (TinkerHelper.inComputerMode(this.graph)) {
-            VertexProperty<V> vertexProperty = (VertexProperty<V>) this.graph.graphView.addProperty(this, key, value);
+            final VertexProperty<V> vertexProperty = (VertexProperty<V>) this.graph.graphView.addProperty(this, key, value);
             ElementHelper.attachProperties(vertexProperty, keyValues);
             return vertexProperty;
         } else {
-            final VertexProperty<V> vertexProperty = optionalId.isPresent() ?
-                    new TinkerVertexProperty<V>(optionalId.get(), this, key, value) :
-                    new TinkerVertexProperty<V>(this, key, value);
+            final Object idValue = optionalId.isPresent() ?
+                    graph.vertexPropertyIdManager.convert(optionalId.get()) :
+                    graph.vertexPropertyIdManager.getNextId(graph);
+
+            final VertexProperty<V> vertexProperty = new TinkerVertexProperty<V>(idValue, this, key, value);
+
             if (null == this.properties) this.properties = new HashMap<>();
             final List<VertexProperty> list = this.properties.getOrDefault(key, new ArrayList<>());
             list.add(vertexProperty);

@@ -51,7 +51,8 @@ import static org.junit.Assert.*;
  */
 @ExceptionCoverage(exceptionClass = Graph.Exceptions.class, methods = {
         "vertexWithIdAlreadyExists",
-        "elementNotFound"
+        "elementNotFound",
+        "idArgsMustBeEitherIdOrElement"
 })
 @SuppressWarnings("ThrowableResultOfMethodCallIgnored")
 public class GraphTest extends AbstractGremlinTest {
@@ -91,30 +92,28 @@ public class GraphTest extends AbstractGremlinTest {
     @Test
     public void shouldHaveExceptionConsistencyWhenFindVertexByIdThatIsNonExistentViaIterator() {
         try {
-            graph.vertices(10000l).next();
-            fail("Call to g.V(10000l) should throw an exception");
+            graph.vertices(graphProvider.convertId(10000l, Vertex.class)).next();
+            fail("Call to g.vertices(10000l) should throw an exception");
         } catch (Exception ex) {
-            assertThat(ex, instanceOf(Graph.Exceptions.elementNotFound(Vertex.class, 10000l).getClass()));
+            assertThat(ex, instanceOf(Graph.Exceptions.elementNotFound(Vertex.class, graphProvider.convertId(10000l, Vertex.class)).getClass()));
         }
-
     }
 
     @Test
     public void shouldHaveExceptionConsistencyWhenFindEdgeByIdThatIsNonExistentViaIterator() {
         try {
-            graph.edges(10000l).next();
-            fail("Call to g.E(10000l) should throw an exception");
+            graph.edges(graphProvider.convertId(10000l, Edge.class)).next();
+            fail("Call to g.edges(10000l) should throw an exception");
         } catch (Exception ex) {
-            assertThat(ex, instanceOf(Graph.Exceptions.elementNotFound(Edge.class, 10000l).getClass()));
+            assertThat(ex, instanceOf(Graph.Exceptions.elementNotFound(Edge.class, graphProvider.convertId(10000l, Edge.class)).getClass()));
         }
-
     }
 
     @Test
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_USER_SUPPLIED_IDS)
     public void shouldHaveExceptionConsistencyWhenAssigningSameIdOnVertex() {
-        final Object o = GraphManager.getGraphProvider().convertId("1");
+        final Object o = graphProvider.convertId("1", Vertex.class);
         graph.addVertex(T.id, o);
         try {
             graph.addVertex(T.id, o);
@@ -122,7 +121,6 @@ public class GraphTest extends AbstractGremlinTest {
         } catch (Exception ex) {
             assertThat(ex, instanceOf(Graph.Exceptions.vertexWithIdAlreadyExists(0).getClass()));
         }
-
     }
 
     @Test
@@ -131,6 +129,7 @@ public class GraphTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_NUMERIC_IDS)
     public void shouldAddVertexWithUserSuppliedNumericId() {
         graph.addVertex(T.id, 1000l);
+        graph.addVertex();
         tryCommit(graph, graph -> {
             final Vertex v = graph.vertices(1000l).next();
             assertEquals(1000l, v.id());
@@ -143,6 +142,7 @@ public class GraphTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_STRING_IDS)
     public void shouldAddVertexWithUserSuppliedStringId() {
         graph.addVertex(T.id, "1000");
+        graph.addVertex();
         tryCommit(graph, graph -> {
             final Vertex v = graph.vertices("1000").next();
             assertEquals("1000", v.id());
@@ -156,6 +156,7 @@ public class GraphTest extends AbstractGremlinTest {
     public void shouldAddVertexWithUserSuppliedUuidId() {
         final UUID uuid = UUID.randomUUID();
         graph.addVertex(T.id, uuid);
+        graph.addVertex();
         tryCommit(graph, graph -> {
             final Vertex v = graph.vertices(uuid).next();
             assertEquals(uuid, v.id());
@@ -166,27 +167,483 @@ public class GraphTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_USER_SUPPLIED_IDS)
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ANY_IDS)
-    public void shouldAddVertexWithUserSuppliedAnyId() {
+    public void shouldAddVertexWithUserSuppliedAnyIdUsingUuid() {
         final UUID uuid = UUID.randomUUID();
         graph.addVertex(T.id, uuid);
+        graph.addVertex();
         tryCommit(graph, graph -> {
             final Vertex v = graph.vertices(uuid).next();
             assertEquals(uuid, v.id());
         });
+    }
 
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_USER_SUPPLIED_IDS)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ANY_IDS)
+    public void shouldAddVertexWithUserSuppliedAnyIdUsingString() {
+        final UUID uuid = UUID.randomUUID();
         graph.addVertex(T.id, uuid.toString());
+        graph.addVertex();
         tryCommit(graph, graph -> {
             final Vertex v = graph.vertices(uuid.toString()).next();
             assertEquals(uuid.toString(), v.id());
         });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_USER_SUPPLIED_IDS)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ANY_IDS)
+    public void shouldAddVertexWithUserSuppliedAnyIdUsingAnyObject() {
+        final UUID uuid = UUID.randomUUID();
 
         // this is different from "FEATURE_CUSTOM_IDS" as TinkerGraph does not define a specific id class
         // (i.e. TinkerId) for the identifier.
-        IoTest.CustomId customId = new IoTest.CustomId("test", uuid);
+        final IoTest.CustomId customId = new IoTest.CustomId("test", uuid);
         graph.addVertex(T.id, customId);
+        graph.addVertex();
         tryCommit(graph, graph -> {
             final Vertex v = graph.vertices(customId).next();
             assertEquals(customId, v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_UUID_IDS)
+    public void shouldIterateVerticesWithUuidIdSupportUsingVertex() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, UUID.randomUUID()) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            final Vertex v = graph.vertices(v1).next();
+            assertEquals(v1.id(), v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_UUID_IDS)
+    public void shouldIterateVerticesWithUuidIdSupportUsingVertexId() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, UUID.randomUUID()) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            final Vertex v = graph.vertices(v1.id()).next();
+            assertEquals(v1.id(), v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_UUID_IDS)
+    public void shouldIterateVerticesWithUuidIdSupportUsingStringRepresentation() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, UUID.randomUUID()) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            final Vertex v = graph.vertices(v1.id().toString()).next();
+            assertEquals(v1.id(), v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_UUID_IDS)
+    public void shouldIterateVerticesWithUuidIdSupportUsingVertices() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, UUID.randomUUID()) : graph.addVertex();
+        final Vertex v2 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, UUID.randomUUID()) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.vertices(v1, v2)));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_UUID_IDS)
+    public void shouldIterateVerticesWithUuidIdSupportUsingVertexIds() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, UUID.randomUUID()) : graph.addVertex();
+        final Vertex v2 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, UUID.randomUUID()) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.vertices(v1.id(), v2.id())));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_UUID_IDS)
+    public void shouldIterateVerticesWithUuidIdSupportUsingStringRepresentations() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, UUID.randomUUID()) : graph.addVertex();
+        final Vertex v2 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, UUID.randomUUID()) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.vertices(v1.id().toString(), v2.id().toString())));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_CUSTOM_IDS)
+    public void shouldIterateVerticesWithCustomIdSupportUsingVertex() {
+        final Vertex v1 = graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            final Vertex v = graph.vertices(v1).next();
+            assertEquals(v1.id(), v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_CUSTOM_IDS)
+    public void shouldIterateVerticesWithCustomIdSupportUsingVertexId() {
+        final Vertex v1 = graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            final Vertex v = graph.vertices(v1.id()).next();
+            assertEquals(v1.id(), v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_CUSTOM_IDS)
+    public void shouldIterateVerticesWithCustomIdSupportUsingStringRepresentation() {
+        final Vertex v1 = graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            final Vertex v = graph.vertices(v1.id().toString()).next();
+            assertEquals(v1.id(), v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_CUSTOM_IDS)
+    public void shouldIterateVerticesWithCustomIdSupportUsingVertices() {
+        final Vertex v1 = graph.addVertex();
+        final Vertex v2 = graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.vertices(v1, v2)));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_CUSTOM_IDS)
+    public void shouldIterateVerticesWithCustomIdSupportUsingVertexIds() {
+        final Vertex v1 = graph.addVertex();
+        final Vertex v2 = graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.vertices(v1.id(), v2.id())));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_CUSTOM_IDS)
+    public void shouldIterateVerticesWithCustomIdSupportUsingStringRepresentations() {
+        final Vertex v1 = graph.addVertex();
+        final Vertex v2 = graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.vertices(v1.id().toString(), v2.id().toString())));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateVerticesWithNumericIdSupportUsingVertex() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 1l) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            final Vertex v = graph.vertices(v1).next();
+            assertEquals(v1.id(), v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateVerticesWithNumericIdSupportUsingVertexId() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 1l) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            final Vertex v = graph.vertices(v1.id()).next();
+            assertEquals(v1.id(), v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateVerticesWithNumericIdSupportUsingLongRepresentation() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 1l) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            final Vertex v = graph.vertices(Long.parseLong(v1.id().toString())).next();
+            assertEquals(v1.id(), v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateVerticesWithNumericIdSupportUsingIntegerRepresentation() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 1l) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            final Vertex v = graph.vertices(Integer.parseInt(v1.id().toString())).next();
+            assertEquals(v1.id(), v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateVerticesWithNumericIdSupportUsingFloatRepresentation() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 1l) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            final Vertex v = graph.vertices(Float.parseFloat(v1.id().toString())).next();
+            assertEquals(v1.id(), v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateVerticesWithNumericIdSupportUsingDoubleRepresentation() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 1l) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            final Vertex v = graph.vertices(Double.parseDouble(v1.id().toString())).next();
+            assertEquals(v1.id(), v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateVerticesWithNumericIdSupportUsingStringRepresentation() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 1l) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            final Vertex v = graph.vertices(v1.id().toString()).next();
+            assertEquals(v1.id(), v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateVerticesWithNumericIdSupportUsingVertices() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 1l) : graph.addVertex();
+        final Vertex v2 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 2l) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.vertices(v1, v2)));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateVerticesWithNumericIdSupportUsingVertexIds() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 1l) : graph.addVertex();
+        final Vertex v2 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 2l) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.vertices(v1.id(), v2.id())));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateVerticesWithNumericIdSupportUsingLongRepresentations() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 1l) : graph.addVertex();
+        final Vertex v2 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 2l) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.vertices(Long.parseLong(v1.id().toString()), Long.parseLong(v2.id().toString()))));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateVerticesWithNumericIdSupportUsingIntegerRepresentations() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 1l) : graph.addVertex();
+        final Vertex v2 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 2l) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.vertices(Integer.parseInt(v1.id().toString()), Integer.parseInt(v2.id().toString()))));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateVerticesWithNumericIdSupportUsingFloatRepresentations() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 1l) : graph.addVertex();
+        final Vertex v2 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 2l) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.vertices(Float.parseFloat(v1.id().toString()), Float.parseFloat(v2.id().toString()))));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateVerticesWithNumericIdSupportUsingDoubleRepresentations() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 1l) : graph.addVertex();
+        final Vertex v2 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 2l) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.vertices(Double.parseDouble(v1.id().toString()), Double.parseDouble(v2.id().toString()))));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateVerticesWithNumericIdSupportUsingStringRepresentations() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 1l) : graph.addVertex();
+        final Vertex v2 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, 2l) : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.vertices(v1.id().toString(), v2.id().toString())));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    public void shouldNotMixTypesForGettingSpecificVerticesWithVertexFirst() {
+        final Vertex v1 = graph.addVertex();
+        try {
+            graph.vertices(v1, graphProvider.convertId("1", Vertex.class));
+            fail("Should have thrown an exception because id arguments were mixed.");
+        } catch (Exception ex) {
+            final Exception expected = Graph.Exceptions.idArgsMustBeEitherIdOrElement();
+            assertEquals(expected.getClass(), ex.getClass());
+            assertEquals(expected.getMessage(), ex.getMessage());
+        }
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    public void shouldNotMixTypesForGettingSpecificVerticesWithStringFirst() {
+        final Vertex v1 = graph.addVertex();
+        try {
+            graph.vertices(graphProvider.convertId("1", Vertex.class), v1);
+            fail("Should have thrown an exception because id arguments were mixed.");
+        } catch (Exception ex) {
+            final Exception expected = Graph.Exceptions.idArgsMustBeEitherIdOrElement();
+            assertEquals(expected.getClass(), ex.getClass());
+            assertEquals(expected.getMessage(), ex.getMessage());
+        }
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_STRING_IDS)
+    public void shouldIterateVerticesWithStringIdSupportUsingVertex() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, "1") : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            final Vertex v = graph.vertices(v1).next();
+            assertEquals(v1.id(), v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_STRING_IDS)
+    public void shouldIterateVerticesWithStringIdSupportUsingVertexId() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, "1") : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            final Vertex v = graph.vertices(v1.id()).next();
+            assertEquals(v1.id(), v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_STRING_IDS)
+    public void shouldIterateVerticesWithStringIdSupportUsingStringRepresentation() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, "1") : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            final Vertex v = graph.vertices(v1.id().toString()).next();
+            assertEquals(v1.id(), v.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_STRING_IDS)
+    public void shouldIterateVerticesWithStringIdSupportUsingVertices() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, "1") : graph.addVertex();
+        final Vertex v2 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, "2") : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.vertices(v1, v2)));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_STRING_IDS)
+    public void shouldIterateVerticesWithStringIdSupportUsingVertexIds() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, "1") : graph.addVertex();
+        final Vertex v2 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, "2") : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.vertices(v1.id(), v2.id())));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_STRING_IDS)
+    public void shouldIterateVerticesWithStringIdSupportUsingStringRepresentations() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v1 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, "1") : graph.addVertex();
+        final Vertex v2 = graph.features().vertex().supportsUserSuppliedIds() ? graph.addVertex(T.id, "2") : graph.addVertex();
+        graph.addVertex();
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.vertices(v1.id().toString(), v2.id().toString())));
         });
     }
 
@@ -354,10 +811,10 @@ public class GraphTest extends AbstractGremlinTest {
         final Vertex c;
         final Vertex d;
         if (graph.features().vertex().supportsUserSuppliedIds()) {
-            a = graph.addVertex(T.id, graphProvider.convertId("1"));
-            b = graph.addVertex(T.id, graphProvider.convertId("2"));
-            c = graph.addVertex(T.id, graphProvider.convertId("3"));
-            d = graph.addVertex(T.id, graphProvider.convertId("4"));
+            a = graph.addVertex(T.id, graphProvider.convertId("1", Vertex.class));
+            b = graph.addVertex(T.id, graphProvider.convertId("2", Vertex.class));
+            c = graph.addVertex(T.id, graphProvider.convertId("3", Vertex.class));
+            d = graph.addVertex(T.id, graphProvider.convertId("4", Vertex.class));
         } else {
             a = graph.addVertex();
             b = graph.addVertex();
@@ -384,10 +841,10 @@ public class GraphTest extends AbstractGremlinTest {
         });
 
         if (graph.features().vertex().supportsUserSuppliedIds()) {
-            final Vertex va = graph.vertices(graphProvider.convertId("1")).next();
-            final Vertex vb = graph.vertices(graphProvider.convertId("2")).next();
-            final Vertex vc = graph.vertices(graphProvider.convertId("3")).next();
-            final Vertex vd = graph.vertices(graphProvider.convertId("4")).next();
+            final Vertex va = graph.vertices(graphProvider.convertId("1", Vertex.class)).next();
+            final Vertex vb = graph.vertices(graphProvider.convertId("2", Vertex.class)).next();
+            final Vertex vc = graph.vertices(graphProvider.convertId("3", Vertex.class)).next();
+            final Vertex vd = graph.vertices(graphProvider.convertId("4", Vertex.class)).next();
 
             assertEquals(a, va);
             assertEquals(b, vb);
@@ -415,12 +872,12 @@ public class GraphTest extends AbstractGremlinTest {
             assertEquals(1l, IteratorUtils.count(vd.edges(Direction.OUT)));
 
             for (Edge x : IteratorUtils.list(a.edges(Direction.OUT))) {
-                assertTrue(x.label().equals(graphProvider.convertId("knows")) || x.label().equals(graphProvider.convertId("hates")));
+                assertTrue(x.label().equals(graphProvider.convertLabel("knows")) || x.label().equals(graphProvider.convertLabel("hates")));
             }
 
-            assertEquals(graphProvider.convertId("hates"), i.label());
-            assertEquals(graphProvider.convertId("2"), i.inVertex().id().toString());
-            assertEquals(graphProvider.convertId("1"), i.outVertex().id().toString());
+            assertEquals(graphProvider.convertLabel("hates"), i.label());
+            assertEquals(graphProvider.convertId("2", Vertex.class).toString(), i.inVertex().id().toString());
+            assertEquals(graphProvider.convertId("1", Vertex.class).toString(), i.outVertex().id().toString());
         }
 
         final Set<Object> vertexIds = new HashSet<>();
@@ -546,15 +1003,15 @@ public class GraphTest extends AbstractGremlinTest {
         assertEquals(0l, IteratorUtils.count(start.edges(Direction.IN)));
         assertEquals(branchSize, IteratorUtils.count(start.edges(Direction.OUT)));
         for (Edge a : IteratorUtils.list(start.edges(Direction.OUT))) {
-            assertEquals(graphProvider.convertId("test1"), a.label());
+            assertEquals(graphProvider.convertLabel("test1"), a.label());
             assertEquals(branchSize, IteratorUtils.count(a.inVertex().vertices(Direction.OUT)));
             assertEquals(1, IteratorUtils.count(a.inVertex().vertices(Direction.IN)));
             for (Edge b : IteratorUtils.list(a.inVertex().edges(Direction.OUT))) {
-                assertEquals(graphProvider.convertId("test2"), b.label());
+                assertEquals(graphProvider.convertLabel("test2"), b.label());
                 assertEquals(branchSize, IteratorUtils.count(b.inVertex().vertices(Direction.OUT)));
                 assertEquals(1, IteratorUtils.count(b.inVertex().vertices(Direction.IN)));
                 for (Edge c : IteratorUtils.list(b.inVertex().edges(Direction.OUT))) {
-                    assertEquals(graphProvider.convertId("test3"), c.label());
+                    assertEquals(graphProvider.convertLabel("test3"), c.label());
                     assertEquals(0, IteratorUtils.count(c.inVertex().vertices(Direction.OUT)));
                     assertEquals(1, IteratorUtils.count(c.inVertex().vertices(Direction.IN)));
                 }
@@ -578,8 +1035,8 @@ public class GraphTest extends AbstractGremlinTest {
         final Vertex v = graph.addVertex();
         final Vertex u = graph.addVertex();
         if (graph.features().edge().properties().supportsStringValues()) {
-            v.property("name", "marko");
-            u.property("name", "pavel");
+            v.property(VertexProperty.Cardinality.single, "name", "marko");
+            u.property(VertexProperty.Cardinality.single, "name", "pavel");
         }
 
         final Edge e = v.addEdge(graphProvider.convertLabel("collaborator"), u);
@@ -589,7 +1046,7 @@ public class GraphTest extends AbstractGremlinTest {
         tryCommit(graph, assertVertexEdgeCounts(2, 1));
         graph.close();
 
-        final Graph reopenedGraph = graphProvider.standardTestGraph(this.getClass(), name.getMethodName());
+        final Graph reopenedGraph = graphProvider.standardTestGraph(this.getClass(), name.getMethodName(), null);
         assertVertexEdgeCounts(2, 1).accept(reopenedGraph);
 
         if (graph.features().vertex().properties().supportsStringValues()) {
@@ -599,11 +1056,517 @@ public class GraphTest extends AbstractGremlinTest {
         }
 
         reopenedGraph.edges().forEachRemaining(edge -> {
-            assertEquals(graphProvider.convertId("collaborator"), edge.label());
+            assertEquals(graphProvider.convertLabel("collaborator"), edge.label());
             if (graph.features().edge().properties().supportsStringValues())
                 assertEquals("internet", edge.property("location").value());
         });
 
-        graphProvider.clear(reopenedGraph, graphProvider.standardGraphConfiguration(this.getClass(), name.getMethodName()));
+        graphProvider.clear(reopenedGraph, graphProvider.standardGraphConfiguration(this.getClass(), name.getMethodName(), null));
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_UUID_IDS)
+    public void shouldIterateEdgesWithUuidIdSupportUsingEdge() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, UUID.randomUUID()) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            final Edge e = graph.edges(e1).next();
+            assertEquals(e1.id(), e.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_UUID_IDS)
+    public void shouldIterateEdgesWithUuidIdSupportUsingEdgeId() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, UUID.randomUUID()) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            final Edge e = graph.edges(e1.id()).next();
+            assertEquals(e1.id(), e.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_UUID_IDS)
+    public void shouldIterateEdgesWithUuidIdSupportUsingStringRepresentation() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, UUID.randomUUID()) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            final Edge e = graph.edges(e1.id().toString()).next();
+            assertEquals(e1.id(), e.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_UUID_IDS)
+    public void shouldIterateEdgesWithUuidIdSupportUsingEdges() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, UUID.randomUUID()) : v.addEdge("self", v);
+        final Edge e2 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, UUID.randomUUID()) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.edges(e1, e2)));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_UUID_IDS)
+    public void shouldIterateEdgesWithUuidIdSupportUsingEdgeIds() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, UUID.randomUUID()) : v.addEdge("self", v);
+        final Edge e2 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, UUID.randomUUID()) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.edges(e1.id(), e2.id())));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_UUID_IDS)
+    public void shouldIterateEdgesWithUuidIdSupportUsingStringRepresentations() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, UUID.randomUUID()) : v.addEdge("self", v);
+        final Edge e2 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, UUID.randomUUID()) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.edges(e1.id().toString(), e2.id().toString())));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_CUSTOM_IDS)
+    public void shouldIterateEdgesWithCustomIdSupportUsingEdge() {
+        final Vertex v = graph.addVertex();
+        final Edge e1 = v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            final Edge e = graph.edges(e1).next();
+            assertEquals(e1.id(), e.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_CUSTOM_IDS)
+    public void shouldIterateEdgesWithCustomIdSupportUsingEdgeId() {
+        final Vertex v = graph.addVertex();
+        final Edge e1 = v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            final Edge e = graph.edges(e1.id()).next();
+            assertEquals(e1.id(), e.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_CUSTOM_IDS)
+    public void shouldIterateEdgesWithCustomIdSupportUsingStringRepresentation() {
+        final Vertex v = graph.addVertex();
+        final Edge e1 = v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            final Edge e = graph.edges(e1.id().toString()).next();
+            assertEquals(e1.id(), e.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_CUSTOM_IDS)
+    public void shouldIterateEdgesWithCustomIdSupportUsingEdges() {
+        final Vertex v = graph.addVertex();
+        final Edge e1 = v.addEdge("self", v);
+        final Edge e2 = v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.edges(e1, e2)));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_CUSTOM_IDS)
+    public void shouldIterateEdgesWithCustomIdSupportUsingEdgeIds() {
+        final Vertex v = graph.addVertex();
+        final Edge e1 = v.addEdge("self", v);
+        final Edge e2 = v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.edges(e1.id(), e2.id())));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_CUSTOM_IDS)
+    public void shouldIterateEdgesWithCustomIdSupportUsingStringRepresentations() {
+        final Vertex v = graph.addVertex();
+        final Edge e1 = v.addEdge("self", v);
+        final Edge e2 = v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.edges(e1.id().toString(), e2.id().toString())));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateEdgesWithNumericIdSupportUsingEdge() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 1l) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            final Edge e = graph.edges(e1).next();
+            assertEquals(e1.id(), e.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateEdgesWithNumericIdSupportUsingEdgeId() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 1l) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            final Edge e = graph.edges(e1.id()).next();
+            assertEquals(e1.id(), e.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateEdgesWithNumericIdSupportUsingLongRepresentation() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 1l) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            final Edge e = graph.edges(Long.parseLong(e1.id().toString())).next();
+            assertEquals(e1.id(), e.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateEdgesWithNumericIdSupportUsingIntegerRepresentation() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 1l) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            final Edge e = graph.edges(Integer.parseInt(e1.id().toString())).next();
+            assertEquals(e1.id(), e.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateEdgesWithNumericIdSupportUsingFloatRepresentation() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 1l) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            final Edge e = graph.edges(Float.parseFloat(e1.id().toString())).next();
+            assertEquals(e1.id(), e.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateEdgesWithNumericIdSupportUsingDoubleRepresentation() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 1l) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            final Edge e = graph.edges(Double.parseDouble(e1.id().toString())).next();
+            assertEquals(e1.id(), e.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateEdgesWithNumericIdSupportUsingStringRepresentation() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 1l) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            final Edge e = graph.edges(e1.id().toString()).next();
+            assertEquals(e1.id(), e.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateEdgesWithNumericIdSupportUsingVertices() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 1l) : v.addEdge("self", v);
+        final Edge e2 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 2l) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.edges(e1, e2)));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateEdgesWithNumericIdSupportUsingEdgeIds() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 1l) : v.addEdge("self", v);
+        final Edge e2 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 2l) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.edges(e1.id(), e2.id())));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateEdgesWithNumericIdSupportUsingLongRepresentations() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 1l) : v.addEdge("self", v);
+        final Edge e2 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 2l) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.edges(Long.parseLong(e1.id().toString()), Long.parseLong(e2.id().toString()))));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateEdgesWithNumericIdSupportUsingIntegerRepresentations() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 1l) : v.addEdge("self", v);
+        final Edge e2 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 2l) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.edges(Integer.parseInt(e1.id().toString()), Integer.parseInt(e2.id().toString()))));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateEdgesWithNumericIdSupportUsingFloatRepresentations() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 1l) : v.addEdge("self", v);
+        final Edge e2 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 2l) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.edges(Float.parseFloat(e1.id().toString()), Float.parseFloat(e2.id().toString()))));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateEdgesWithNumericIdSupportUsingDoubleRepresentations() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 1l) : v.addEdge("self", v);
+        final Edge e2 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 2l) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.edges(Double.parseDouble(e1.id().toString()), Double.parseDouble(e2.id().toString()))));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_NUMERIC_IDS)
+    public void shouldIterateEdgesWithNumericIdSupportUsingStringRepresentations() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 1l) : v.addEdge("self", v);
+        final Edge e2 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, 2l) : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.edges(e1.id().toString(), e2.id().toString())));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    public void shouldNotMixTypesForGettingSpecificEdgesWithEdgeFirst() {
+        final Vertex v = graph.addVertex();
+        final Edge e1 = v.addEdge("self", v);
+        try {
+            graph.edges(e1, graphProvider.convertId("1", Edge.class));
+            fail("Should have thrown an exception because id arguments were mixed.");
+        } catch (Exception ex) {
+            final Exception expected = Graph.Exceptions.idArgsMustBeEitherIdOrElement();
+            assertEquals(expected.getClass(), ex.getClass());
+            assertEquals(expected.getMessage(), ex.getMessage());
+        }
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    public void shouldNotMixTypesForGettingSpecificEdgesWithStringFirst() {
+        final Vertex v = graph.addVertex();
+        final Edge e1 = v.addEdge("self", v);
+        try {
+            graph.edges(graphProvider.convertId("1", Edge.class), e1);
+            fail("Should have thrown an exception because id arguments were mixed.");
+        } catch (Exception ex) {
+            final Exception expected = Graph.Exceptions.idArgsMustBeEitherIdOrElement();
+            assertEquals(expected.getClass(), ex.getClass());
+            assertEquals(expected.getMessage(), ex.getMessage());
+        }
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_STRING_IDS)
+    public void shouldIterateEdgesWithStringIdSupportUsingEdge() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, "1") : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            final Edge e = graph.edges(e1).next();
+            assertEquals(e1.id(), e.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_STRING_IDS)
+    public void shouldIterateEdgesWithStringIdSupportUsingEdgeId() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, "1") : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            final Edge e = graph.edges(e1.id()).next();
+            assertEquals(e1.id(), e.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_STRING_IDS)
+    public void shouldIterateEdgesWithStringIdSupportUsingStringRepresentation() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, "1") : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            final Edge e = graph.edges(e1.id().toString()).next();
+            assertEquals(e1.id(), e.id());
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_STRING_IDS)
+    public void shouldIterateEdgesWithStringIdSupportUsingEdges() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, "1") : v.addEdge("self", v);
+        final Edge e2 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, "2") : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.edges(e1, e2)));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_STRING_IDS)
+    public void shouldIterateEdgesWithStringIdSupportUsingEdgeIds() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, "1") : v.addEdge("self", v);
+        final Edge e2 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, "2") : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.edges(e1.id(), e2.id())));
+        });
+    }
+
+    @Test
+    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
+    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_STRING_IDS)
+    public void shouldIterateEdgesWithStringIdSupportUsingStringRepresentations() {
+        // if the graph supports id assigned, it should allow it.  if the graph does not, it will generate one
+        final Vertex v = graph.addVertex();
+        final Edge e1 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, "1") : v.addEdge("self", v);
+        final Edge e2 = graph.features().edge().supportsUserSuppliedIds() ? v.addEdge("self", v, T.id, "2") : v.addEdge("self", v);
+        v.addEdge("self", v);
+        tryCommit(graph, graph -> {
+            assertEquals(2, IteratorUtils.count(graph.edges(e1.id().toString(), e2.id().toString())));
+        });
     }
 }
