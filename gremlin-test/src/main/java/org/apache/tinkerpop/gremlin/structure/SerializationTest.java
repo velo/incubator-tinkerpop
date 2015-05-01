@@ -24,9 +24,16 @@ import org.apache.tinkerpop.gremlin.AbstractGremlinTest;
 import org.apache.tinkerpop.gremlin.LoadGraphWith;
 import org.apache.tinkerpop.gremlin.process.traversal.Path;
 import org.apache.tinkerpop.gremlin.process.traversal.util.TraversalMetrics;
+import org.apache.tinkerpop.gremlin.structure.io.graphson.GraphSONIo;
 import org.apache.tinkerpop.gremlin.structure.io.graphson.GraphSONTokens;
+import org.apache.tinkerpop.gremlin.structure.io.gryo.GryoIo;
 import org.apache.tinkerpop.gremlin.structure.io.gryo.GryoReader;
 import org.apache.tinkerpop.gremlin.structure.io.gryo.GryoWriter;
+import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedEdge;
+import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedPath;
+import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedProperty;
+import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedVertex;
+import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedVertexProperty;
 import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
@@ -53,15 +60,16 @@ public class SerializationTest {
         @Test
         @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
         public void shouldSerializeVertexAsDetached() throws Exception {
-            final GryoWriter gryoWriter = graph.io().gryoWriter().create();
-            final GryoReader gryoReader = graph.io().gryoReader().create();
+            final GryoIo gryoIo = graph.io(GryoIo.build());
+            final GryoWriter gryoWriter = gryoIo.writer().create();
+            final GryoReader gryoReader = gryoIo.reader().create();
 
             final Vertex v = graph.vertices(convertToVertexId("marko")).next();
             final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             gryoWriter.writeObject(outputStream, v);
 
             final ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
-            final Vertex detached = gryoReader.readObject(inputStream);
+            final Vertex detached = gryoReader.readObject(inputStream, DetachedVertex.class);
             assertNotNull(detached);
             assertEquals(v.label(), detached.label());
             assertEquals(v.id(), detached.id());
@@ -72,15 +80,16 @@ public class SerializationTest {
         @Test
         @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
         public void shouldSerializeEdgeAsDetached() throws Exception {
-            final GryoWriter gryoWriter = graph.io().gryoWriter().create();
-            final GryoReader gryoReader = graph.io().gryoReader().create();
+            final GryoIo gryoIo = graph.io(GryoIo.build());
+            final GryoWriter gryoWriter = gryoIo.writer().create();
+            final GryoReader gryoReader = gryoIo.reader().create();
 
             final Edge e = g.E(convertToEdgeId("marko", "knows", "vadas")).next();
             final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             gryoWriter.writeObject(outputStream, e);
 
             final ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
-            final Edge detached = gryoReader.readObject(inputStream);
+            final Edge detached = gryoReader.readObject(inputStream, DetachedEdge.class);
             assertNotNull(detached);
             assertEquals(e.label(), detached.label());
             assertEquals(e.id(), detached.id());
@@ -90,15 +99,16 @@ public class SerializationTest {
         @Test
         @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
         public void shouldSerializePropertyAsDetached() throws Exception {
-            final GryoWriter gryoWriter = graph.io().gryoWriter().create();
-            final GryoReader gryoReader = graph.io().gryoReader().create();
+            final GryoIo gryoIo = graph.io(GryoIo.build());
+            final GryoWriter gryoWriter = gryoIo.writer().create();
+            final GryoReader gryoReader = gryoIo.reader().create();
 
             final Property property = g.E(convertToEdgeId("marko", "knows", "vadas")).next().property("weight");
             final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             gryoWriter.writeObject(outputStream, property);
 
             final ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
-            final Property detached = gryoReader.readObject(inputStream);
+            final Property detached = gryoReader.readObject(inputStream, DetachedProperty.class);
             assertNotNull(detached);
             assertEquals(property.key(), detached.key());
             assertEquals(property.value(), detached.value());
@@ -107,15 +117,16 @@ public class SerializationTest {
         @Test
         @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
         public void shouldSerializeVertexPropertyAsDetached() throws Exception {
-            final GryoWriter gryoWriter = graph.io().gryoWriter().create();
-            final GryoReader gryoReader = graph.io().gryoReader().create();
+            final GryoIo gryoIo = graph.io(GryoIo.build());
+            final GryoWriter gryoWriter = gryoIo.writer().create();
+            final GryoReader gryoReader = gryoIo.reader().create();
 
             final VertexProperty vertexProperty = graph.vertices(convertToVertexId("marko")).next().property("name");
             final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             gryoWriter.writeObject(outputStream, vertexProperty);
 
             final ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
-            final VertexProperty detached = gryoReader.readObject(inputStream);
+            final VertexProperty detached = gryoReader.readObject(inputStream, DetachedVertexProperty.class);
             assertNotNull(detached);
             assertEquals(vertexProperty.label(), detached.label());
             assertEquals(vertexProperty.id(), detached.id());
@@ -125,15 +136,16 @@ public class SerializationTest {
         @Test
         @LoadGraphWith(LoadGraphWith.GraphData.CREW)
         public void shouldSerializeVertexPropertyWithPropertiesAsDetached() throws Exception {
-            final GryoWriter gryoWriter = graph.io().gryoWriter().create();
-            final GryoReader gryoReader = graph.io().gryoReader().create();
+            final GryoIo gryoIo = graph.io(GryoIo.build());
+            final GryoWriter gryoWriter = gryoIo.writer().create();
+            final GryoReader gryoReader = gryoIo.reader().create();
 
             final VertexProperty<?> vertexProperty = graph.vertices(convertToVertexId("marko")).next().properties("location").next();
             final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             gryoWriter.writeObject(outputStream, vertexProperty);
 
             final ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
-            final VertexProperty<?> detached = gryoReader.readObject(inputStream);
+            final VertexProperty<?> detached = gryoReader.readObject(inputStream, DetachedVertexProperty.class);
 
             assertNotNull(detached);
             assertEquals(vertexProperty.label(), detached.label());
@@ -148,8 +160,9 @@ public class SerializationTest {
         @Test
         @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
         public void shouldSerializePathAsDetached() throws Exception {
-            final GryoWriter gryoWriter = graph.io().gryoWriter().create();
-            final GryoReader gryoReader = graph.io().gryoReader().create();
+            final GryoIo gryoIo = graph.io(GryoIo.build());
+            final GryoWriter gryoWriter = gryoIo.writer().create();
+            final GryoReader gryoReader = gryoIo.reader().create();
 
             final Path p = g.V(convertToVertexId("marko")).as("a").outE().as("b").inV().as("c").path()
                     .filter(t -> ((Vertex) t.get().objects().get(2)).value("name").equals("lop")).next();
@@ -157,7 +170,7 @@ public class SerializationTest {
             gryoWriter.writeObject(outputStream, p);
 
             final ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
-            final Path detached = gryoReader.readObject(inputStream);
+            final Path detached = gryoReader.readObject(inputStream, DetachedPath.class);
             assertNotNull(detached);
             assertEquals(p.labels().size(), detached.labels().size());
             assertEquals(p.labels().get(0).size(), detached.labels().get(0).size());
@@ -193,15 +206,16 @@ public class SerializationTest {
         @Test
         @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
         public void shouldSerializeTraversalMetrics() throws Exception {
-            final GryoWriter gryoWriter = graph.io().gryoWriter().create();
-            final GryoReader gryoReader = graph.io().gryoReader().create();
+            final GryoIo gryoIo = graph.io(GryoIo.build());
+            final GryoWriter gryoWriter = gryoIo.writer().create();
+            final GryoReader gryoReader = gryoIo.reader().create();
 
             final TraversalMetrics before = (TraversalMetrics) g.V().both().profile().cap(TraversalMetrics.METRICS_KEY).next();
             final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             gryoWriter.writeObject(outputStream, before);
 
             final ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
-            final TraversalMetrics after = gryoReader.readObject(inputStream);
+            final TraversalMetrics after = gryoReader.readObject(inputStream, TraversalMetrics.class);
             assertNotNull(after);
             assertEquals(before.getMetrics().size(), after.getMetrics().size());
             assertEquals(before.getDuration(TimeUnit.MILLISECONDS), after.getDuration(TimeUnit.MILLISECONDS));
@@ -216,7 +230,7 @@ public class SerializationTest {
         @Test
         @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
         public void shouldSerializeVertex() throws Exception {
-            final ObjectMapper mapper = graph.io().graphSONMapper().create().createMapper();
+            final ObjectMapper mapper = graph.io(GraphSONIo.build()).mapper().create().createMapper();
             final Vertex v = graph.vertices(convertToVertexId("marko")).next();
             final String json = mapper.writeValueAsString(v);
             final Map<String, Object> m = mapper.readValue(json, mapTypeReference);
@@ -224,14 +238,14 @@ public class SerializationTest {
             assertEquals(GraphSONTokens.VERTEX, m.get(GraphSONTokens.TYPE));
             assertEquals(v.label(), m.get(GraphSONTokens.LABEL));
             assertNotNull(m.get(GraphSONTokens.ID));
-            assertEquals(v.value("name").toString(), ((Map) ((List) ((Map) m.get(GraphSONTokens.PROPERTIES)).get("name")).get(0)).get(GraphSONTokens.VALUE));
-            assertEquals((Integer) v.value("age"), ((Map) ((List) ((Map) m.get(GraphSONTokens.PROPERTIES)).get("age")).get(0)).get(GraphSONTokens.VALUE));
+            assertEquals(v.value("name").toString(), ((List<Map>) m.get(GraphSONTokens.PROPERTIES)).stream().filter(map -> map.get(GraphSONTokens.LABEL).equals("name")).findFirst().get().get(GraphSONTokens.VALUE).toString());
+            assertEquals((Integer) v.value("age"), ((List<Map>) m.get(GraphSONTokens.PROPERTIES)).stream().filter(map -> map.get(GraphSONTokens.LABEL).equals("age")).findFirst().get().get(GraphSONTokens.VALUE));
         }
 
         @Test
         @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
         public void shouldSerializeEdge() throws Exception {
-            final ObjectMapper mapper = graph.io().graphSONMapper().create().createMapper();
+            final ObjectMapper mapper = graph.io(GraphSONIo.build()).mapper().create().createMapper();
             final Edge e = g.E(convertToEdgeId("marko", "knows", "vadas")).next();
             final String json = mapper.writeValueAsString(e);
             final Map<String, Object> m = mapper.readValue(json, mapTypeReference);
@@ -245,18 +259,19 @@ public class SerializationTest {
         @Test
         @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
         public void shouldSerializeProperty() throws Exception {
-            final ObjectMapper mapper = graph.io().graphSONMapper().create().createMapper();
+            final ObjectMapper mapper = graph.io(GraphSONIo.build()).mapper().create().createMapper();
             final Property p = g.E(convertToEdgeId("marko", "knows", "vadas")).next().property("weight");
             final String json = mapper.writeValueAsString(p);
             final Map<String, Object> m = mapper.readValue(json, mapTypeReference);
 
             assertEquals(p.value(), m.get(GraphSONTokens.VALUE));
+            assertEquals(p.key(), m.get(GraphSONTokens.KEY));
         }
 
         @Test
         @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
         public void shouldSerializeVertexProperty() throws Exception {
-            final ObjectMapper mapper = graph.io().graphSONMapper().create().createMapper();
+            final ObjectMapper mapper = graph.io(GraphSONIo.build()).mapper().create().createMapper();
             final VertexProperty vp = graph.vertices(convertToVertexId("marko")).next().property("name");
             final String json = mapper.writeValueAsString(vp);
             final Map<String, Object> m = mapper.readValue(json, mapTypeReference);
@@ -269,7 +284,7 @@ public class SerializationTest {
         @Test
         @LoadGraphWith(LoadGraphWith.GraphData.CREW)
         public void shouldSerializeVertexPropertyWithProperties() throws Exception {
-            final ObjectMapper mapper = graph.io().graphSONMapper().create().createMapper();
+            final ObjectMapper mapper = graph.io(GraphSONIo.build()).mapper().create().createMapper();
             final VertexProperty vp = graph.vertices(convertToVertexId("marko")).next().properties("location").next();
             final String json = mapper.writeValueAsString(vp);
             final Map<String, Object> m = mapper.readValue(json, mapTypeReference);
@@ -284,7 +299,7 @@ public class SerializationTest {
         @Test
         @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
         public void shouldSerializePath() throws Exception {
-            final ObjectMapper mapper = graph.io().graphSONMapper().create().createMapper();
+            final ObjectMapper mapper = graph.io(GraphSONIo.build()).mapper().create().createMapper();
             final Path p = g.V(convertToVertexId("marko")).as("a").outE().as("b").inV().as("c").path()
                     .filter(t -> ((Vertex) t.get().objects().get(2)).value("name").equals("lop")).next();
             final String json = mapper.writeValueAsString(p);
@@ -303,15 +318,15 @@ public class SerializationTest {
 
             final List<Object> objects = (List<Object>) m.get(GraphSONTokens.OBJECTS);
             assertEquals(3, objects.size());
-            assertEquals("marko", ((Map) ((List) ((Map) ((Map) objects.get(0)).get(GraphSONTokens.PROPERTIES)).get("name")).get(0)).get(GraphSONTokens.VALUE));
+            assertEquals("marko", ((List<Map>) ((Map) objects.get(0)).get(GraphSONTokens.PROPERTIES)).stream().filter(map -> map.get(GraphSONTokens.LABEL).equals("name")).findFirst().get().get(GraphSONTokens.VALUE).toString());
             assertEquals("created", ((Map) objects.get(1)).get(GraphSONTokens.LABEL));
-            assertEquals("lop", ((Map) ((List) ((Map) ((Map) objects.get(2)).get(GraphSONTokens.PROPERTIES)).get("name")).get(0)).get(GraphSONTokens.VALUE));
+            assertEquals("lop", ((List<Map>) ((Map) objects.get(2)).get(GraphSONTokens.PROPERTIES)).stream().filter(map -> map.get(GraphSONTokens.LABEL).equals("name")).findFirst().get().get(GraphSONTokens.VALUE).toString());
         }
 
         @Test
         @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
         public void shouldSerializeTraversalMetrics() throws Exception {
-            final ObjectMapper mapper = graph.io().graphSONMapper().create().createMapper();
+            final ObjectMapper mapper = graph.io(GraphSONIo.build()).mapper().create().createMapper();
             final TraversalMetrics tm = (TraversalMetrics) g.V().both().profile().cap(TraversalMetrics.METRICS_KEY).next();
             final String json = mapper.writeValueAsString(tm);
             final Map<String, Object> m = mapper.readValue(json, mapTypeReference);

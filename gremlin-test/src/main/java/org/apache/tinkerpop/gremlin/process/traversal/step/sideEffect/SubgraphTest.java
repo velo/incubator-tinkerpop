@@ -59,7 +59,7 @@ public abstract class SubgraphTest extends AbstractGremlinProcessTest {
         graphProvider.clear(config);
         Graph subgraph = graphProvider.openTestGraph(config);
         /////
-        Traversal<Vertex, Graph> traversal = get_g_V_withSideEffectXsgX_outEXknowsX_subgraphXsgX_name_capXsgX(convertToVertexId("marko"), subgraph);
+        final Traversal<Vertex, Graph> traversal = get_g_V_withSideEffectXsgX_outEXknowsX_subgraphXsgX_name_capXsgX(convertToVertexId("marko"), subgraph);
         printTraversalForm(traversal);
         subgraph = traversal.next();
         assertVertexEdgeCounts(3, 2).accept(subgraph);
@@ -91,10 +91,10 @@ public abstract class SubgraphTest extends AbstractGremlinProcessTest {
         graphProvider.clear(config);
         final Graph subgraph = graphProvider.openTestGraph(config);
         /////
-        Traversal<Vertex, String> traversal = get_g_V_withSideEffectXsgX_repeatXbothEXcreatedX_subgraphXsgX_outVX_timesX5X_name_dedup(subgraph);
+        final Traversal<Vertex, String> traversal = get_g_V_withSideEffectXsgX_repeatXbothEXcreatedX_subgraphXsgX_outVX_timesX5X_name_dedup(subgraph);
         printTraversalForm(traversal);
         checkResults(Arrays.asList("marko", "josh", "peter"), traversal);
-        final Graph subGraph = traversal.asAdmin().getSideEffects().get("sg");
+        final Graph subGraph = traversal.asAdmin().getSideEffects().<Graph>get("sg").get();
         assertVertexEdgeCounts(5, 4).accept(subGraph);
 
         graphProvider.clear(subgraph, config);
@@ -105,12 +105,12 @@ public abstract class SubgraphTest extends AbstractGremlinProcessTest {
 
         @Override
         public Traversal<Vertex, Graph> get_g_V_withSideEffectXsgX_outEXknowsX_subgraphXsgX_name_capXsgX(final Object v1Id, final Graph subgraph) {
-            return g.V(v1Id).withSideEffect("sg", () -> subgraph).outE("knows").subgraph("sg").values("name").cap("sg");
+            return g.withSideEffect("sg", () -> subgraph).V(v1Id).outE("knows").subgraph("sg").values("name").cap("sg");
         }
 
         @Override
         public Traversal<Vertex, String> get_g_V_withSideEffectXsgX_repeatXbothEXcreatedX_subgraphXsgX_outVX_timesX5X_name_dedup(final Graph subgraph) {
-            return g.V().withSideEffect("sg", () -> subgraph).repeat(bothE("created").subgraph("sg").outV()).times(5).<String>values("name").dedup();
+            return g.withSideEffect("sg", () -> subgraph).V().repeat(bothE("created").subgraph("sg").outV()).times(5).<String>values("name").dedup();
         }
     }
 }

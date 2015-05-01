@@ -19,10 +19,12 @@
 package org.apache.tinkerpop.gremlin.util.iterator;
 
 import org.apache.tinkerpop.gremlin.process.traversal.FastNoSuchElementException;
+import org.apache.tinkerpop.gremlin.structure.util.Comparators;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -61,6 +63,12 @@ public final class IteratorUtils {
         return collection;
     }
 
+    public static void iterate(final Iterator iterator) {
+        while(iterator.hasNext()) {
+            iterator.next();
+        }
+    }
+
     public static final long count(final Iterator iterator) {
         long ix = 0;
         for (; iterator.hasNext(); ++ix) iterator.next();
@@ -69,6 +77,12 @@ public final class IteratorUtils {
 
     public static <S> List<S> list(final Iterator<S> iterator) {
         return fill(iterator, new ArrayList<>());
+    }
+
+    public static <S> List<S> list(final Iterator<S> iterator, final Comparator comparator) {
+        final List<S> l = list(iterator);
+        Collections.sort(l, comparator);
+        return l;
     }
 
     public static <S> Set<S> set(final Iterator<S> iterator) {

@@ -20,7 +20,7 @@ package org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect;
 
 import org.apache.tinkerpop.gremlin.LoadGraphWith;
 import org.apache.tinkerpop.gremlin.process.AbstractGremlinProcessTest;
-import org.apache.tinkerpop.gremlin.process.traversal.T;
+import org.apache.tinkerpop.gremlin.structure.T;
 import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
 import org.apache.tinkerpop.gremlin.process.traversal.TraversalEngine;
 import org.apache.tinkerpop.gremlin.process.UseEngine;
@@ -61,7 +61,7 @@ public abstract class SideEffectCapTest extends AbstractGremlinProcessTest {
         final Traversal<Vertex, Map<String, Map<Object, Long>>> traversal = get_g_V_chooseXlabel_person__age_groupCountXaX__name_groupCountXbXX_capXa_bX();
         printTraversalForm(traversal);
         assertTrue(traversal.hasNext());
-        Map<String, Map<Object, Long>> map = traversal.next();
+        final Map<String, Map<Object, Long>> map = traversal.next();
         assertFalse(traversal.hasNext());
         assertEquals(2, map.size());
         assertTrue(map.containsKey("a"));

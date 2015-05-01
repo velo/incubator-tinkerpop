@@ -18,14 +18,11 @@
  */
 package org.apache.tinkerpop.gremlin.structure.util.detached;
 
-import org.apache.tinkerpop.gremlin.process.traversal.T;
 import org.apache.tinkerpop.gremlin.structure.Direction;
 import org.apache.tinkerpop.gremlin.structure.Edge;
 import org.apache.tinkerpop.gremlin.structure.Graph;
 import org.apache.tinkerpop.gremlin.structure.Property;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
-import org.apache.tinkerpop.gremlin.structure.util.Attachable;
-import org.apache.tinkerpop.gremlin.structure.util.ElementHelper;
 import org.apache.tinkerpop.gremlin.structure.util.StringFactory;
 import org.apache.tinkerpop.gremlin.util.iterator.IteratorUtils;
 import org.javatuples.Pair;
@@ -40,7 +37,7 @@ import java.util.Map;
  * a {@link Graph} in the sense that the {@link Edge} was constructed from a {@link Graph} instance and this reference
  * was removed or it can mean that the {@code DetachedEdge} could have been constructed independently of a
  * {@link Graph} instance in the first place.
- * <br/>
+ * <p/>
  * A {@code DetachedEdge} only has reference to the properties and in/out vertices that are associated with it at the
  * time of detachment (or construction) and is not traversable or mutable.  Note that the references to the in/out
  * vertices are {@link DetachedVertex} instances that only have reference to the
@@ -88,45 +85,9 @@ public class DetachedEdge extends DetachedElement<Edge> implements Edge {
         }
     }
 
-
     @Override
     public String toString() {
         return StringFactory.edgeString(this);
-    }
-
-    @Override
-    public Edge attach(final Vertex hostVertex) {
-        final Iterator<Edge> edges = IteratorUtils.filter(hostVertex.edges(Direction.OUT, this.label), edge -> edge.equals(this));
-        if (!edges.hasNext())
-            throw Attachable.Exceptions.canNotAttachEdgeToHostVertex(this, hostVertex);
-        return edges.next();
-    }
-
-    @Override
-    public Edge attach(final Graph hostGraph) {
-        final Iterator<Edge> edges = hostGraph.edges(this.id);
-        if (!edges.hasNext())
-            throw Attachable.Exceptions.canNotAttachEdgeToHostGraph(this, hostGraph);
-        return edges.next();
-    }
-
-    public static Edge addTo(final Graph graph, final DetachedEdge detachedEdge) {
-        Iterator<Vertex> vertices = graph.vertices(detachedEdge.outVertex.id());
-        final Vertex outV = vertices.hasNext() ? vertices.next() : graph.addVertex(T.id, detachedEdge.outVertex.id());
-        vertices = graph.vertices(detachedEdge.inVertex.id());
-        final Vertex inV = vertices.hasNext() ? vertices.next() : graph.addVertex(T.id, detachedEdge.inVertex.id());
-        if (ElementHelper.areEqual(outV, inV)) {
-            final Iterator<Edge> itty = outV.edges(Direction.OUT, detachedEdge.label());
-            while (itty.hasNext()) {
-                final Edge e = itty.next();
-                if (ElementHelper.areEqual(detachedEdge, e))
-                    return e;
-            }
-        }
-        final Edge e = outV.addEdge(detachedEdge.label(), inV, T.id, detachedEdge.id());
-        if (null != detachedEdge.properties)
-            detachedEdge.properties.entrySet().forEach(kv -> kv.getValue().forEach(p -> e.<Object>property(kv.getKey(), p.value())));
-        return e;
     }
 
     @Override

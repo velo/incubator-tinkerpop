@@ -18,89 +18,26 @@
  */
 package org.apache.tinkerpop.gremlin.hadoop.structure.io.gryo;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.LocalFileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.mapreduce.RecordReader;
-import org.apache.hadoop.mapreduce.RecordWriter;
-import org.apache.hadoop.mapreduce.TaskAttemptContext;
-import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
-import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.tinkerpop.gremlin.hadoop.HadoopGraphProvider;
-import org.apache.tinkerpop.gremlin.hadoop.structure.io.VertexWritable;
-import org.apache.tinkerpop.gremlin.structure.Direction;
-import org.apache.tinkerpop.gremlin.structure.Property;
-import org.apache.tinkerpop.gremlin.structure.Vertex;
-import org.apache.tinkerpop.gremlin.util.iterator.IteratorUtils;
+import org.apache.tinkerpop.gremlin.hadoop.structure.io.TestFileReaderWriterHelper;
 import org.junit.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import java.util.List;
+import java.util.Optional;
 
 /**
- * @author Joshua Shinavier (http://fortytwo.net)
+ * @author Marko A. Rodriguez (http://markorodriguez.com)
  */
 public class GryoRecordReaderWriterTest {
     @Test
-    public void testAll() throws Exception {
-        Configuration configuration = new Configuration(false);
-        configuration.set("fs.file.impl", LocalFileSystem.class.getName());
-        configuration.set("fs.default.name", "file:///");
-
-        File testFile = new File(HadoopGraphProvider.PATHS.get("grateful-dead-vertices.kryo"));
-        FileSplit split = new FileSplit(
-                new Path(testFile.getAbsoluteFile().toURI().toString()), 0,
-                testFile.length(), null);
-        System.out.println("reading Gryo file " + testFile.getAbsolutePath() + " (" + testFile.length() + " bytes)");
-
-        GryoInputFormat inputFormat = ReflectionUtils.newInstance(GryoInputFormat.class, configuration);
-        TaskAttemptContext job = new TaskAttemptContext(configuration, new TaskAttemptID());
-        RecordReader reader = inputFormat.createRecordReader(split, job);
-
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        try (DataOutputStream dos = new DataOutputStream(bos)) {
-            GryoOutputFormat outputFormat = new GryoOutputFormat();
-            RecordWriter writer = outputFormat.getRecordWriter(job, dos);
-
-            float lastProgress = -1f;
-            int count = 0;
-            boolean foundKeyValue = false;
-            while (reader.nextKeyValue()) {
-                //System.out.println("" + reader.getProgress() + "> " + reader.getCurrentKey() + ": " + reader.getCurrentValue());
-                count++;
-                float progress = reader.getProgress();
-                assertTrue(progress >= lastProgress);
-                assertEquals(NullWritable.class, reader.getCurrentKey().getClass());
-                VertexWritable v = (VertexWritable) reader.getCurrentValue();
-                writer.write(NullWritable.get(), v);
-
-                Vertex vertex = v.get();
-                assertEquals(Integer.class, vertex.id().getClass());
-
-                Object value = vertex.property("name");
-                if (((Property) value).value().equals("SUGAR MAGNOLIA")) {
-                    foundKeyValue = true;
-                    assertEquals(92, IteratorUtils.count(vertex.edges(Direction.OUT)));
-                    assertEquals(77, IteratorUtils.count(vertex.edges(Direction.IN)));
-                }
-
-                lastProgress = progress;
-            }
-            assertEquals(808, count);
-            assertTrue(foundKeyValue);
+    public void shouldSplitFileAndWriteProperSplits() throws Exception {
+        for (int numberOfSplits = 1; numberOfSplits < 10; numberOfSplits++) {
+            final File testFile = new File(HadoopGraphProvider.PATHS.get("grateful-dead.kryo"));
+            System.out.println("Testing: " + testFile + " (splits " + numberOfSplits + ")");
+            final List<FileSplit> splits = TestFileReaderWriterHelper.generateFileSplits(testFile, numberOfSplits);
+            TestFileReaderWriterHelper.validateFileSplits(splits, GryoInputFormat.class, Optional.of(GryoOutputFormat.class));
         }
-
-        //System.out.println("bos: " + new String(bos.toByteArray()));
-        String[] lines = new String(bos.toByteArray()).split("\\x3a\\x15.\\x11\\x70...");
-        assertEquals(808, lines.length);
-        String line42 = lines[41];
-        //System.out.println("line42: " + line42);
-        assertTrue(line42.contains("ITS ALL OVER NO"));
     }
 }

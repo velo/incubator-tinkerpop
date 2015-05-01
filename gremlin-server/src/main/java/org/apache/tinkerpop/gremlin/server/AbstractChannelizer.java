@@ -27,7 +27,6 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.ssl.SslHandler;
-import io.netty.util.concurrent.EventExecutorGroup;
 import org.javatuples.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,7 +50,7 @@ import java.util.stream.Stream;
  * A base implementation for the {@code Channelizer} which does a basic configuration of the the pipeline, one that
  * is generally common to virtually any Gremlin Server operation (i.e. where the server's purpose is to process
  * Gremlin scripts).
- * <br/>
+ * <p/>
  * Implementers need only worry about determining how incoming data is converted to a
  * {@link org.apache.tinkerpop.gremlin.driver.message.RequestMessage} and outgoing data is converted from a
  * {@link org.apache.tinkerpop.gremlin.driver.message.ResponseMessage} to whatever expected format is needed by the pipeline.

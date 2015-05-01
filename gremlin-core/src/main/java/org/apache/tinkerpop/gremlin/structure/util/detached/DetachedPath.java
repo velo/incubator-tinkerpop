@@ -21,10 +21,10 @@ package org.apache.tinkerpop.gremlin.structure.util.detached;
 import org.apache.tinkerpop.gremlin.process.traversal.Path;
 import org.apache.tinkerpop.gremlin.process.traversal.step.util.MutablePath;
 import org.apache.tinkerpop.gremlin.structure.Element;
-import org.apache.tinkerpop.gremlin.structure.Graph;
 import org.apache.tinkerpop.gremlin.structure.Property;
-import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.apache.tinkerpop.gremlin.structure.util.Attachable;
+
+import java.util.function.Function;
 
 /**
  * @author Marko A. Rodriguez (http://markorodriguez.com)
@@ -33,6 +33,10 @@ public class DetachedPath extends MutablePath implements Attachable<Path> {
 
     private DetachedPath() {
 
+    }
+
+    public Path get() {
+        return this;
     }
 
     protected DetachedPath(final Path path, final boolean withProperties) {
@@ -57,16 +61,9 @@ public class DetachedPath extends MutablePath implements Attachable<Path> {
     }
 
     @Override
-    public Path attach(final Graph hostGraph) {
+    public Path attach(final Function<Attachable<Path>, Path> method) {
         final Path path = MutablePath.make();  // TODO: Use ImmutablePath?
-        this.forEach((object, labels) -> path.extend(object instanceof Attachable ? ((Attachable) object).attach(hostGraph) : object, labels.toArray(new String[labels.size()])));
-        return path;
-    }
-
-    @Override
-    public Path attach(final Vertex hostVertex) {
-        final Path path = MutablePath.make();  // TODO: Use ImmutablePath?
-        this.forEach((object, labels) -> path.extend(object instanceof Attachable ? ((Attachable) object).attach(hostVertex) : object, labels.toArray(new String[labels.size()])));
+        this.forEach((object, labels) -> path.extend(object instanceof Attachable ? ((Attachable) object).attach(method) : object, labels.toArray(new String[labels.size()])));
         return path;
     }
 }

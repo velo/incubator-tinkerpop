@@ -28,8 +28,14 @@ import org.apache.tinkerpop.gremlin.process.traversal.strategy.AbstractTraversal
 import org.apache.tinkerpop.gremlin.process.traversal.util.TraversalHelper;
 import org.apache.tinkerpop.gremlin.structure.Compare;
 import org.apache.tinkerpop.gremlin.structure.Contains;
+import org.apache.tinkerpop.gremlin.structure.P;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.BiPredicate;
 
 /**
@@ -38,8 +44,8 @@ import java.util.function.BiPredicate;
 public final class RangeByIsCountStrategy extends AbstractTraversalStrategy implements TraversalStrategy {
 
     private static final Map<BiPredicate, Long> RANGE_PREDICATES = new HashMap<BiPredicate, Long>() {{
-        put(Compare.inside, 0L);
-        put(Compare.outside, 1L);
+        //put(Compare.inside, 0L);
+        //put(Compare.outside, 1L);
         put(Contains.within, 1L);
         put(Contains.without, 0L);
     }};
@@ -61,23 +67,28 @@ public final class RangeByIsCountStrategy extends AbstractTraversalStrategy impl
                 final Step next = traversal.getSteps().get(i + 1);
                 if (next instanceof IsStep && !(prev instanceof RangeGlobalStep)) { // if a RangeStep was provided, assume that the user knows what he's doing
                     final IsStep isStep = (IsStep) next;
-                    final Object value = isStep.getValue();
-                    final BiPredicate predicate = isStep.getPredicate();
-                    if (value instanceof Number) {
-                        final long highRangeOffset = INCREASED_OFFSET_SCALAR_PREDICATES.contains(predicate) ? 1L : 0L;
-                        final long highRange = ((Number) value).longValue() + highRangeOffset;
-                        TraversalHelper.insertBeforeStep(new RangeGlobalStep<>(traversal, 0L, highRange), curr, traversal);
-                        i++;
-                    } else {
-                        final Long highRangeOffset = RANGE_PREDICATES.get(predicate);
-                        if (value instanceof Collection && highRangeOffset != null) {
-                            final Object high = Collections.max((Collection) value);
-                            if (high instanceof Number) {
-                                final long highRange = ((Number) high).longValue() + highRangeOffset;
-                                TraversalHelper.insertBeforeStep(new RangeGlobalStep<>(traversal, 0L, highRange), curr, traversal);
-                                i++;
+                    Long highRange = null;
+                    for (P p : (Iterable<P>) isStep.getPredicates()) {
+                        final Object value = p.getValue();
+                        final BiPredicate predicate = p.getBiPredicate();
+                        if (value instanceof Number) {
+                            final long highRangeOffset = INCREASED_OFFSET_SCALAR_PREDICATES.contains(predicate) ? 1L : 0L;
+                            final Long highRangeCandidate = ((Number) value).longValue() + highRangeOffset;
+                            highRange = highRange == null || highRangeCandidate > highRange ? highRangeCandidate : highRange;
+                        } else {
+                            final Long highRangeOffset = RANGE_PREDICATES.get(predicate);
+                            if (value instanceof Collection && highRangeOffset != null) {
+                                final Object high = Collections.max((Collection) value);
+                                if (high instanceof Number) {
+                                    final Long highRangeCandidate = ((Number) high).longValue() + highRangeOffset;
+                                    highRange = highRange == null || highRangeCandidate > highRange ? highRangeCandidate : highRange;
+                                }
                             }
                         }
+                    }
+                    if (highRange != null) {
+                        TraversalHelper.insertBeforeStep(new RangeGlobalStep<>(traversal, 0L, highRange), curr, traversal);
+                        i++;
                     }
                 }
             }

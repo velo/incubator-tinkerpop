@@ -24,22 +24,21 @@ package org.apache.tinkerpop.gremlin.structure.util.star;
 import org.apache.commons.configuration.BaseConfiguration;
 import org.apache.commons.configuration.Configuration;
 import org.apache.tinkerpop.gremlin.process.computer.GraphComputer;
-import org.apache.tinkerpop.gremlin.process.traversal.T;
 import org.apache.tinkerpop.gremlin.structure.Direction;
 import org.apache.tinkerpop.gremlin.structure.Edge;
 import org.apache.tinkerpop.gremlin.structure.Element;
 import org.apache.tinkerpop.gremlin.structure.Graph;
 import org.apache.tinkerpop.gremlin.structure.Property;
+import org.apache.tinkerpop.gremlin.structure.T;
 import org.apache.tinkerpop.gremlin.structure.Transaction;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.apache.tinkerpop.gremlin.structure.VertexProperty;
+import org.apache.tinkerpop.gremlin.structure.util.Attachable;
 import org.apache.tinkerpop.gremlin.structure.util.ElementHelper;
 import org.apache.tinkerpop.gremlin.structure.util.StringFactory;
-import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedEdge;
-import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedFactory;
-import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedVertex;
 import org.apache.tinkerpop.gremlin.util.iterator.IteratorUtils;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -52,7 +51,7 @@ import java.util.stream.Stream;
 /**
  * @author Marko A. Rodriguez (http://markorodriguez.com)
  */
-public final class StarGraph implements Graph {
+public final class StarGraph implements Graph, Serializable {
 
     private static final Configuration STAR_GRAPH_CONFIGURATION = new BaseConfiguration();
 
@@ -60,21 +59,31 @@ public final class StarGraph implements Graph {
         STAR_GRAPH_CONFIGURATION.setProperty(Graph.GRAPH, StarGraph.class.getCanonicalName());
     }
 
-    private StarVertex starVertex = null;
-    private Long nextId = 0l;
+    protected Long nextId = 0l;
+    protected StarVertex starVertex = null;
+    protected Map<Object, Map<String, Object>> edgeProperties = null;
+    protected Map<Object, Map<String, Object>> metaProperties = null;
 
-    private final Map<Object, Map<String, Object>> edgeProperties = new HashMap<>();
-    private final Map<Object, Map<String, Object>> metaProperties = new HashMap<>();
+    private StarGraph() {
+    }
 
     public StarVertex getStarVertex() {
         return this.starVertex;
     }
 
+    private Long nextId() {
+        return this.nextId++;
+    }
+
     @Override
     public Vertex addVertex(final Object... keyValues) {
-        return null == this.starVertex ?
-                this.starVertex = new StarVertex(ElementHelper.getIdValue(keyValues).get(), ElementHelper.getLabelValue(keyValues).get()) :
-                new StarAdjacentVertex(ElementHelper.getIdValue(keyValues).get());
+        if (null == this.starVertex) {
+            ElementHelper.legalPropertyKeyValueArray(keyValues);
+            this.starVertex = new StarVertex(ElementHelper.getIdValue(keyValues).orElse(this.nextId()), ElementHelper.getLabelValue(keyValues).orElse(Vertex.DEFAULT_LABEL));
+            ElementHelper.attachProperties(this.starVertex, VertexProperty.Cardinality.list, keyValues); // TODO: is this smart? I say no... cause vertex property ids are not preserved.
+            return this.starVertex;
+        } else
+            return new StarAdjacentVertex(ElementHelper.getIdValue(keyValues).orElse(this.nextId()));
     }
 
     @Override
@@ -120,8 +129,8 @@ public final class StarGraph implements Graph {
         return null == this.starVertex ?
                 Collections.emptyIterator() :
                 Stream.concat(
-                        this.starVertex.inEdges.values().stream(),
-                        this.starVertex.outEdges.values().stream())
+                        null == this.starVertex.inEdges ? Stream.empty() : this.starVertex.inEdges.values().stream(),
+                        null == this.starVertex.outEdges ? Stream.empty() : this.starVertex.outEdges.values().stream())
                         .flatMap(List::stream)
                         .filter(edge -> {
                             // todo: kinda fishy - need to better nail down how stuff should work here - none of these feel consistent right now.
@@ -164,39 +173,30 @@ public final class StarGraph implements Graph {
 
     public static StarGraph of(final Vertex vertex) {
         final StarGraph starGraph = new StarGraph();
-        StarGraph.addTo(starGraph, DetachedFactory.detach(vertex, true));
-        vertex.edges(Direction.BOTH).forEachRemaining(edge -> StarGraph.addTo(starGraph, DetachedFactory.detach(edge, true)));
-        return starGraph;
-    }
-
-    public static Vertex addTo(final StarGraph graph, final DetachedVertex detachedVertex) {
-        if (null != graph.starVertex)
-            return null;
-        graph.addVertex(T.id, detachedVertex.id(), T.label, detachedVertex.label());
-        detachedVertex.properties().forEachRemaining(detachedVertexProperty -> {
-            final VertexProperty<?> starVertexProperty = graph.starVertex.property(VertexProperty.Cardinality.list, detachedVertexProperty.key(), detachedVertexProperty.value(), T.id, detachedVertexProperty.id());
-            detachedVertexProperty.properties().forEachRemaining(detachedVertexPropertyProperty -> starVertexProperty.property(detachedVertexPropertyProperty.key(), detachedVertexPropertyProperty.value()));
+        final StarVertex starVertex = (StarVertex) starGraph.addVertex(T.id, vertex.id(), T.label, vertex.label());
+        vertex.properties().forEachRemaining(vp -> {
+            final VertexProperty<?> starVertexProperty = starVertex.property(VertexProperty.Cardinality.list, vp.key(), vp.value(), T.id, vp.id());
+            vp.properties().forEachRemaining(p -> starVertexProperty.property(p.key(), p.value()));
         });
-        return graph.starVertex;
-    }
+        vertex.edges(Direction.IN).forEachRemaining(edge -> {
+            final Edge starEdge = starVertex.addInEdge(edge.label(), starGraph.addVertex(T.id, edge.outVertex().id()), T.id, edge.id());
+            edge.properties().forEachRemaining(p -> starEdge.property(p.key(), p.value()));
+        });
 
-    public static Edge addTo(final StarGraph graph, final DetachedEdge edge) {
-        final Edge starEdge = !graph.starVertex.id().equals(edge.inVertex().id()) ?
-                graph.starVertex.addOutEdge(edge.label(), edge.inVertex(), T.id, edge.id()) :
-                graph.starVertex.addInEdge(edge.label(), edge.outVertex(), T.id, edge.id());
-        edge.properties().forEachRemaining(property -> starEdge.property(property.key(), property.value()));
-        return starEdge;
-    }
-
-    protected Long generateId() {
-        return this.nextId++;
+        vertex.edges(Direction.OUT).forEachRemaining(edge -> {
+            if (!ElementHelper.areEqual(starVertex, edge.inVertex())) { // only do a self loop once
+                final Edge starEdge = starVertex.addOutEdge(edge.label(), starGraph.addVertex(T.id, edge.inVertex().id()), T.id, edge.id());
+                edge.properties().forEachRemaining(p -> starEdge.property(p.key(), p.value()));
+            }
+        });
+        return starGraph;
     }
 
     ///////////////////////
     //// STAR ELEMENT ////
     //////////////////////
 
-    public abstract class StarElement implements Element {
+    public abstract class StarElement<E extends Element> implements Element, Attachable<E> {
 
         protected final Object id;
         protected final String label;
@@ -230,25 +230,38 @@ public final class StarGraph implements Graph {
         public int hashCode() {
             return ElementHelper.hashCode(this);
         }
+
+        @Override
+        public E get() {
+            return (E) this;
+        }
     }
 
     //////////////////////
     //// STAR VERTEX ////
     /////////////////////
 
-    public final class StarVertex extends StarElement implements Vertex {
+    public final class StarVertex extends StarElement<Vertex> implements Vertex {
 
-        private Map<String, List<Edge>> outEdges = new HashMap<>();
-        private Map<String, List<Edge>> inEdges = new HashMap<>();
-        private Map<String, List<VertexProperty>> vertexProperties = new HashMap<>();
+        protected Map<String, List<Edge>> outEdges = null;
+        protected Map<String, List<Edge>> inEdges = null;
+        protected Map<String, List<VertexProperty>> vertexProperties = null;
 
         public StarVertex(final Object id, final String label) {
             super(id, label);
         }
 
         public void dropEdges() {
-            this.outEdges.clear();
-            this.inEdges.clear();
+            this.outEdges = null;
+            this.inEdges = null;
+        }
+
+        public void dropVertexProperties(final String... propertyKeys) {
+            if (null != this.vertexProperties) {
+                for (final String key : propertyKeys) {
+                    this.vertexProperties.remove(key);
+                }
+            }
         }
 
         @Override
@@ -258,28 +271,38 @@ public final class StarGraph implements Graph {
 
         @Override
         public <V> VertexProperty<V> property(final String key, final V value, final Object... keyValues) {
+            ElementHelper.validateProperty(key, value);
+            ElementHelper.legalPropertyKeyValueArray(keyValues);
             return this.property(VertexProperty.Cardinality.single, key, value, keyValues);
         }
 
-        protected Edge addOutEdge(final String label, final Vertex inVertex, final Object... keyValues) {
+        Edge addOutEdge(final String label, final Vertex inVertex, final Object... keyValues) {
+            ElementHelper.validateLabel(label);
+            ElementHelper.legalPropertyKeyValueArray(keyValues);
+            if (null == this.outEdges)
+                this.outEdges = new HashMap<>();
             List<Edge> outE = this.outEdges.get(label);
             if (null == outE) {
                 outE = new ArrayList<>();
                 this.outEdges.put(label, outE);
             }
-            final StarEdge outEdge = new StarOutEdge(ElementHelper.getIdValue(keyValues).orElse(generateId()), label, inVertex.id());
+            final StarEdge outEdge = new StarOutEdge(ElementHelper.getIdValue(keyValues).orElse(nextId()), label, inVertex.id());
             ElementHelper.attachProperties(outEdge, keyValues);
             outE.add(outEdge);
             return outEdge;
         }
 
-        protected Edge addInEdge(final String label, final Vertex outVertex, final Object... keyValues) {
+        Edge addInEdge(final String label, final Vertex outVertex, final Object... keyValues) {
+            ElementHelper.validateLabel(label);
+            ElementHelper.legalPropertyKeyValueArray(keyValues);
+            if (null == this.inEdges)
+                this.inEdges = new HashMap<>();
             List<Edge> inE = this.inEdges.get(label);
             if (null == inE) {
                 inE = new ArrayList<>();
                 this.inEdges.put(label, inE);
             }
-            final StarEdge inEdge = new StarInEdge(ElementHelper.getIdValue(keyValues).orElse(generateId()), label, outVertex.id());
+            final StarEdge inEdge = new StarInEdge(ElementHelper.getIdValue(keyValues).orElse(nextId()), label, outVertex.id());
             ElementHelper.attachProperties(inEdge, keyValues);
             inE.add(inEdge);
             return inEdge;
@@ -287,8 +310,11 @@ public final class StarGraph implements Graph {
 
         @Override
         public <V> VertexProperty<V> property(final VertexProperty.Cardinality cardinality, final String key, V value, final Object... keyValues) {
+            ElementHelper.legalPropertyKeyValueArray(keyValues);
+            if (null == this.vertexProperties)
+                this.vertexProperties = new HashMap<>();
             final List<VertexProperty> list = cardinality.equals(VertexProperty.Cardinality.single) ? new ArrayList<>(1) : this.vertexProperties.getOrDefault(key, new ArrayList<>());
-            final VertexProperty<V> vertexProperty = new StarVertexProperty<>(ElementHelper.getIdValue(keyValues).orElse(generateId()), key, value);
+            final VertexProperty<V> vertexProperty = new StarVertexProperty<>(ElementHelper.getIdValue(keyValues).orElse(nextId()), key, value);
             ElementHelper.attachProperties(vertexProperty, keyValues);
             list.add(vertexProperty);
             this.vertexProperties.put(key, list);
@@ -298,7 +324,7 @@ public final class StarGraph implements Graph {
         @Override
         public Iterator<Edge> edges(final Direction direction, final String... edgeLabels) {
             if (direction.equals(Direction.OUT)) {
-                return edgeLabels.length == 0 ?
+                return null == this.outEdges ? Collections.emptyIterator() : edgeLabels.length == 0 ?
                         IteratorUtils.flatMap(this.outEdges.values().iterator(), List::iterator) :
                         this.outEdges.entrySet().stream()
                                 .filter(entry -> ElementHelper.keyExists(entry.getKey(), edgeLabels))
@@ -306,7 +332,7 @@ public final class StarGraph implements Graph {
                                 .flatMap(List::stream)
                                 .iterator();
             } else if (direction.equals(Direction.IN)) {
-                return edgeLabels.length == 0 ?
+                return null == this.inEdges ? Collections.emptyIterator() : edgeLabels.length == 0 ?
                         IteratorUtils.flatMap(this.inEdges.values().iterator(), List::iterator) :
                         this.inEdges.entrySet().stream()
                                 .filter(entry -> ElementHelper.keyExists(entry.getKey(), edgeLabels))
@@ -339,7 +365,7 @@ public final class StarGraph implements Graph {
 
         @Override
         public <V> Iterator<VertexProperty<V>> properties(final String... propertyKeys) {
-            if (this.vertexProperties.isEmpty())
+            if (null == this.vertexProperties || this.vertexProperties.isEmpty())
                 return Collections.emptyIterator();
             else if (propertyKeys.length == 0)
                 return (Iterator) this.vertexProperties.entrySet().stream()
@@ -359,18 +385,18 @@ public final class StarGraph implements Graph {
     //// STAR VERTEX PROPERTY ////
     //////////////////////////////
 
-    public final class StarVertexProperty<V> extends StarElement implements VertexProperty<V> {
+    public final class StarVertexProperty<V> extends StarElement<VertexProperty<V>> implements VertexProperty<V> {
 
         private final V value;
 
-        public StarVertexProperty(final Object id, final String key, final V value) {
+        private StarVertexProperty(final Object id, final String key, final V value) {
             super(id, key);
             this.value = value;
         }
 
         @Override
         public String key() {
-            return this.label;
+            return this.label();
         }
 
         @Override
@@ -385,17 +411,18 @@ public final class StarGraph implements Graph {
 
         @Override
         public Vertex element() {
-            return starVertex;
+            return StarGraph.this.starVertex;
         }
 
         @Override
         public void remove() {
-            StarGraph.this.starVertex.vertexProperties.get(this.label).remove(this);
+            if (null != StarGraph.this.starVertex.vertexProperties)
+                StarGraph.this.starVertex.vertexProperties.get(this.label()).remove(this);
         }
 
         @Override
         public <U> Iterator<Property<U>> properties(final String... propertyKeys) {
-            final Map<String, Object> properties = metaProperties.get(this.id);
+            final Map<String, Object> properties = null == metaProperties ? null : metaProperties.get(this.id);
             if (null == properties || properties.isEmpty())
                 return Collections.emptyIterator();
             else if (propertyKeys.length == 0)
@@ -417,6 +444,8 @@ public final class StarGraph implements Graph {
 
         @Override
         public <U> Property<U> property(final String key, final U value) {
+            if (null == metaProperties)
+                metaProperties = new HashMap<>();
             Map<String, Object> properties = metaProperties.get(this.id);
             if (null == properties) {
                 properties = new HashMap<>();
@@ -441,7 +470,7 @@ public final class StarGraph implements Graph {
 
         private final Object id;
 
-        protected StarAdjacentVertex(final Object id) {
+        private StarAdjacentVertex(final Object id) {
             this.id = id;
         }
 
@@ -517,17 +546,20 @@ public final class StarGraph implements Graph {
     //// STAR EDGE ////
     ///////////////////
 
-    public abstract class StarEdge extends StarElement implements Edge {
+    public abstract class StarEdge extends StarElement<Edge> implements Edge {
 
         protected final Object otherId;
 
-        public StarEdge(final Object id, final String label, final Object otherId) {
+        private StarEdge(final Object id, final String label, final Object otherId) {
             super(id, label);
             this.otherId = otherId;
         }
 
         @Override
         public <V> Property<V> property(final String key, final V value) {
+            ElementHelper.validateProperty(key, value);
+            if (null == edgeProperties)
+                edgeProperties = new HashMap<>();
             Map<String, Object> properties = edgeProperties.get(this.id);
             if (null == properties) {
                 properties = new HashMap<>();
@@ -539,7 +571,7 @@ public final class StarGraph implements Graph {
 
         @Override
         public <V> Iterator<Property<V>> properties(final String... propertyKeys) {
-            Map<String, Object> properties = edgeProperties.get(this.id);
+            Map<String, Object> properties = null == edgeProperties ? null : edgeProperties.get(this.id);
             if (null == properties || properties.isEmpty())
                 return Collections.emptyIterator();
             else if (propertyKeys.length == 0)
@@ -582,7 +614,7 @@ public final class StarGraph implements Graph {
 
     public final class StarOutEdge extends StarEdge {
 
-        public StarOutEdge(final Object id, final String label, final Object otherId) {
+        private StarOutEdge(final Object id, final String label, final Object otherId) {
             super(id, label, otherId);
         }
 
@@ -599,7 +631,7 @@ public final class StarGraph implements Graph {
 
     public final class StarInEdge extends StarEdge {
 
-        public StarInEdge(final Object id, final String label, final Object otherId) {
+        private StarInEdge(final Object id, final String label, final Object otherId) {
             super(id, label, otherId);
         }
 
@@ -618,13 +650,13 @@ public final class StarGraph implements Graph {
     //// STAR PROPERTY ////
     ///////////////////////
 
-    public final class StarProperty<V> implements Property<V> {
+    public final class StarProperty<V> implements Property<V>, Attachable<Property<V>> {
 
         private final String key;
         private final V value;
         private final Element element;
 
-        public StarProperty(final String key, final V value, final Element element) {
+        private StarProperty(final String key, final V value, final Element element) {
             this.key = key.intern();
             this.value = value;
             this.element = element;
@@ -652,7 +684,7 @@ public final class StarGraph implements Graph {
 
         @Override
         public void remove() {
-            throw Exceptions.propertyRemovalNotSupported();
+            throw Property.Exceptions.propertyRemovalNotSupported();
         }
 
         @Override
@@ -668,6 +700,11 @@ public final class StarGraph implements Graph {
         @Override
         public int hashCode() {
             return ElementHelper.hashCode(this);
+        }
+
+        @Override
+        public Property<V> get() {
+            return this;
         }
     }
 }

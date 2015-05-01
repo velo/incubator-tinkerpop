@@ -29,7 +29,7 @@ At the most general level there is `Traversal<S,E>` which implements `Iterator<E
 
 The classic notion of a graph traversal is provided by `GraphTraversal<S,E>` which extends `Traversal<S,E>`. GraphTraversal provides an interpretation of the graph data in terms of vertices, edges, etc. and thus, a graph traversal link:http://en.wikipedia.org/wiki/Domain-specific_language[DSL].
 
-:IMPORTANT The underlying `Step` implementations provided by TinkerPop should encompass most of the functionality required by a DSL author. It is important that DSL authors leverage the provided steps as then the common optimization and decoration strategies can reason on the underlying traversal sequence. If new steps are introduced, then common traversal strategies may not function properly.
+IMPORTANT: The underlying `Step` implementations provided by TinkerPop should encompass most of the functionality required by a DSL author. It is important that DSL authors leverage the provided steps as then the common optimization and decoration strategies can reason on the underlying traversal sequence. If new steps are introduced, then common traversal strategies may not function properly.
 
 [[graph-traversal-steps]]
 Graph Traversal Steps
@@ -38,6 +38,8 @@ Graph Traversal Steps
 image::step-types.png[width=650]
 
 A `GraphTraversal<S,E>` can be spawned off of a Graph, Vertex, Edge, or VertexProperty. It can also be spawned anonymously (i.e. empty) via `__`. A graph traversal is composed of an ordered list of steps. All the steps provided by `GraphTraversal` inherit from the more general forms diagrammed above. A list of all the steps (and their descriptions) are provided in the TinkerPop3 link:http://www.tinkerpop.com/javadocs/x.y.z/core/org/apache/tinkerpop/gremlin/process/graph/GraphTraversal.html[GraphTraversal JavaDoc]. The following subsections will demonstrate the GraphTraversal steps using the <<gremlin-console,Gremlin Console>>.
+
+NOTE: To reduce the verbosity of the expression, it is good to `import static org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__.*`. This way, instead of doing `__.inE()` for an anonymous traversal, it is possible to simply write `inE()`.
 
 [[lambda-steps]]
 Lambda Steps
@@ -71,14 +73,12 @@ The `Traverser<S>` object provides access to:
 image:map-lambda.png[width=150,float=right]
 [gremlin-groovy,modern]
 ----
-g.V(1).as('a').out() <1>
-g.V(1).as('a').out().map {it.path('a')} <2>
-g.V(1).as('a').out().select('a') <3>
+g.V(1).out().values('name') <1>
+g.V(1).out().map {it.get().value('name')} <2>
 ----
 
-<1> A standard outgoing traversal from vertex 1.
-<2> For each vertex outgoing adjacent to vertex 1, get the vertex at `a` (which is vertex 1).
-<3> The <<select-step,`select()`>>-step is implemented as a `map()`-step that accesses data in the historic path.
+<1> An outgoing traversal from vertex 1 to the name values of the adjacent vertices.
+<2> The same operation, but using a lambda to access the name property values.
 
 image:filter-lambda.png[width=160,float=right]
 [gremlin-groovy,modern]
@@ -224,7 +224,7 @@ The `and()`-step ensures that all provided traversals yield a result (*filter*).
 ----
 g.V().and(
    outE('knows'),
-   values('age').is(lt,30)).
+   values('age').is(lt(30))).
      values('name')
 ----
 
@@ -315,7 +315,7 @@ The `choose()`-step (*branch*) routes the current traverser to a particular trav
 [gremlin-groovy,modern]
 ----
 g.V().hasLabel('person').
-      choose(values('age').is(lte, 30),
+      choose(values('age').is(lte(30)),
         __.in(),
         __.out()).values('name') <1>
 g.V().hasLabel('person').
@@ -521,7 +521,7 @@ image::has-step.png[width=670]
 It is possible to filter vertices, edges, and vertex properties based on their properties using `has()`-step (*filter*). There are numerous variations on `has()` including:
 
   * `has(key,value)`: Remove the traverser if its element does not have the provided key/value property.
-  * `has(key,bi-predicate,object)`: Remove the traverser if its element does not have a key value that satisfies the bi-predicate.
+  * `has(key,predicate)`: Remove the traverser if its element does not have a key value that satisfies the bi-predicate.
   * `hasLabel(labels...)`: Remove the traverser if its element does not have any of the labels.
   * `hasId(ids...)`: Remove the traverser if its element does not have any of the ids.
   * `hasKey(keys...)`: Remove the traverser if its property does not have any of the keys.
@@ -533,11 +533,11 @@ It is possible to filter vertices, edges, and vertex properties based on their p
 [gremlin-groovy,modern]
 ----
 g.V().hasLabel('person')
-g.V().hasLabel('person').out().has('name',within,['vadas','josh'])
-g.V().hasLabel('person').out().has('name',within,['vadas','josh']).
+g.V().hasLabel('person').out().has('name',within('vadas','josh'))
+g.V().hasLabel('person').out().has('name',within('vadas','josh')).
       outE().hasLabel('created')
-g.V().has('age',inside,[20,30]).values('age') <1>
-g.V().has('age',outside,[20,30]).values('age') <2>
+g.V().has('age',inside(20,30)).values('age') <1>
+g.V().has('age',outside(20,30)).values('age') <2>
 ----
 
 <1> Find all vertices whose ages are between 20 (inclusive) and 30 (exclusive).
@@ -549,7 +549,7 @@ It is also possible to filter any arbitrary object based on a anonymous traversa
 ----
 g.V().has(out('created')).values('name') <1>
 g.V().out('knows').has(out('created')).values('name') <2>
-g.V().has(out('created').count().is(gte, 2L)).values('name') <3>
+g.V().has(out('created').count().is(gte(2L))).values('name') <3>
 g.V().has(out('knows').has(out('created'))).values('name') <4>
 ----
 
@@ -593,12 +593,12 @@ It is possible to filter scalar values using `is()`-step (*filter*).
 [gremlin-groovy,modern]
 ----
 g.V().values('age').is(32)
-g.V().values('age').is(lte, 30)
-g.V().values('age').is(inside, [30, 40])
+g.V().values('age').is(lte(30))
+g.V().values('age').is(inside(30, 40))
 g.V().has(__.in('created').count().is(1l)).values('name') <1>
-g.V().has(__.in('created').count().is(gte, 2l)).values('name') <2>
+g.V().has(__.in('created').count().is(gte(2l))).values('name') <2>
 g.V().has(__.in('created').values('age').
-                           mean().is(inside, [30d, 35d])).values('name') <3>
+                           mean().is(inside(30d, 35d))).values('name') <3>
 ----
 
 <1> Find projects having exactly one contributor.
@@ -679,7 +679,7 @@ MatchStep brings functionality similar to link:http://en.wikipedia.org/wiki/SPAR
 
 [gremlin-groovy]
 ----
-graph.io().readGraphML('data/grateful-dead.xml')
+graph.io(graphml()).readGraph('data/grateful-dead.xml')
 g = graph.traversal(standard())
 g.V().match('a',
         __.as('a').has('name', 'Garcia'),
@@ -743,7 +743,7 @@ Match is typically used in conjunction with both `select()` (demonstrated previo
 g.V().match('a',
         __.as('a').out('created').as('b'),
         __.as('b').in('created').as('c')).
-          where('a', neq, 'c').select('a','c').by('name')
+          where('a', neq('c')).select('a','c').by('name')
 ----
 
 The `where()`-step can take either a `BiPredicate` (first example below) or a `Traversal` (second example below). Using `MatchWhereStrategy`, `where()`-clauses can be automatically folded into `match()` and thus, subject to `match()`-steps budget-match algorithm.
@@ -822,7 +822,7 @@ The `or()`-step ensures that at least one of the provided traversals yield a res
 ----
 g.V().or(
    __.outE('created'),
-   __.inE('created').count().is(gt,1l)).
+   __.inE('created').count().is(gt(1l))).
      values('name')
 ----
 
@@ -997,8 +997,6 @@ g.V().until(has('name','ripple')).
 
 IMPORTANT: There are two modulators for `repeat()`: `until()` and `emit()`. If `until()` comes after `repeat()` it is do/while looping. If `until()` comes before `repeat()` it is while/do looping. If `emit()` is placed after `repeat()`, it is evaluated on the traversers leaving the repeat-traversal. If `emit()` is placed before `repeat()`, it is evaluated on the traversers prior to entering the repeat-traversal.
 
-NOTE: The `times(x)` step modulator is an alias for `until{it.loops() >= x}`.
-
 The `repeat()`-step also supports an "emit predicate", where the predicate for an empty argument `emit()` is true (i.e. `emit() == emit{true}`). With `emit()`, the traverser is split in two -- the traverser exits the code block as well as continues back within the code block (assuming `until()` holds true).
 
 [gremlin-groovy,modern]
@@ -1068,18 +1066,18 @@ Two trivial examples are presented below to demonstrate the *initial value suppl
 
 [gremlin-groovy,modern]
 ----
-g.V().withSack(1.0f).sack()
+g.withSack(1.0f).V().sack()
 rand = new Random()
-g.V().withSack {rand.nextFloat()}.sack()
+g.withSack {rand.nextFloat()}.V().sack()
 ----
 
 A more complicated initial value supplier example is presented below where the sack values are used in a running computation and then emitted at the end of the traversal. When an edge is traversed, the edge weight is multiplied by the sack value (`sack(mult,'weight')`).
 
 [gremlin-groovy,modern]
 ----
-g.V().withSack(1.0f).repeat(outE().sack(mult,'weight').inV()).times(2)
-g.V().withSack(1.0f).repeat(outE().sack(mult,'weight').inV()).times(2).sack()
-g.V().withSack(1.0f).repeat(outE().sack(mult,'weight').inV()).times(2).path().
+g.withSack(1.0f).V().repeat(outE().sack(mult,'weight').inV()).times(2)
+g.withSack(1.0f).V().repeat(outE().sack(mult,'weight').inV()).times(2).sack()
+g.withSack(1.0f).V().repeat(outE().sack(mult,'weight').inV()).times(2).path().
       by().by('weight')
 ----
 
@@ -1087,9 +1085,9 @@ image:gremlin-sacks-standing.png[width=100,float=left] When complex objects are 
 
 [gremlin-groovy,modern]
 ----
-g.V().withSack {[:]}.out().out().
+g.withSack {[:]}.V().out().out().
       sack {m,v -> m[v.value('name')] = v.value('lang'); m}.sack() // BAD: single map
-g.V().withSack {[:]} {m -> m.clone()}.out().out().
+g.withSack {[:]}{it.clone()}.V().out().out().
       sack {m,v -> m[v.value('name')] = v.value('lang'); m}.sack() // GOOD: cloned map
 ----
 
@@ -1183,10 +1181,10 @@ Finally, like <<match-step,`match()`>>-step, it is possible to use `where()`, as
 ----
 g.V().as('a').out('created').in('created').as('b').select().by('name') <1>
 g.V().as('a').out('created').in('created').as('b').
-      select().by('name').where('a',neq,'b') <2>
+      select().by('name').where('a',neq('b')) <2>
 g.V().as('a').out('created').in('created').as('b').
       select(). <3>
-      where('a',neq,'b').
+      where('a',neq('b')).
       where(__.as('a').out('knows').as('b')).
       select().by('name')
 ----

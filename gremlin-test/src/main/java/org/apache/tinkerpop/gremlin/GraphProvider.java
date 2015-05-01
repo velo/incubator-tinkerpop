@@ -27,8 +27,8 @@ import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversal;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__;
 import org.apache.tinkerpop.gremlin.process.traversal.engine.StandardTraversalEngine;
-import org.apache.tinkerpop.gremlin.process.traversal.traverser.B_O_PA_S_SE_SL_Traverser;
-import org.apache.tinkerpop.gremlin.process.traversal.traverser.B_O_P_PA_S_SE_SL_Traverser;
+import org.apache.tinkerpop.gremlin.process.traversal.traverser.B_O_S_SE_SL_Traverser;
+import org.apache.tinkerpop.gremlin.process.traversal.traverser.B_O_P_S_SE_SL_Traverser;
 import org.apache.tinkerpop.gremlin.process.traversal.traverser.B_O_Traverser;
 import org.apache.tinkerpop.gremlin.process.traversal.traverser.O_Traverser;
 import org.apache.tinkerpop.gremlin.structure.Edge;
@@ -37,7 +37,6 @@ import org.apache.tinkerpop.gremlin.structure.Graph;
 import org.apache.tinkerpop.gremlin.structure.Property;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.apache.tinkerpop.gremlin.structure.VertexProperty;
-import org.apache.tinkerpop.gremlin.structure.util.Attachable;
 import org.apache.tinkerpop.gremlin.structure.util.GraphFactory;
 
 import java.util.Collections;
@@ -71,8 +70,8 @@ public interface GraphProvider {
         add(__.class);
         add(DefaultGraphTraversal.class);
         add(GraphTraversalSource.class);
-        add(B_O_PA_S_SE_SL_Traverser.class);
-        add(B_O_P_PA_S_SE_SL_Traverser.class);
+        add(B_O_S_SE_SL_Traverser.class);
+        add(B_O_P_S_SE_SL_Traverser.class);
         add(B_O_Traverser.class);
         add(O_Traverser.class);
     }};
@@ -92,7 +91,7 @@ public interface GraphProvider {
      * {@link StandardTraversalEngine} so vendors should override as necessary if their implementation is testing
      * something that requires a different engine type, like those tests for
      * {@link org.apache.tinkerpop.gremlin.process.traversal.TraversalEngine.Type}.
-     * <br/>
+     * <p/>
      * Implementations should apply strategies as necessary to the
      * {@link org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource.Builder} before calling
      * it's {@code create} method.
@@ -146,7 +145,7 @@ public interface GraphProvider {
      * Clears a {@link Graph} of all data and settings.  Implementations will have different ways of handling this.
      * For a brute force approach, implementers can simply delete data directories provided in the configuration.
      * Implementers may choose a more elegant approach if it exists.
-     * <br/>
+     * <p/>
      * Implementations should be able to accept an argument of null for the Graph, in which case the only action
      * that can be performed is a clear given the configuration.  The method will typically be called this way
      * as clean up task on setup to ensure that a persisted graph has a clear space to create a test graph.
@@ -230,15 +229,15 @@ public interface GraphProvider {
      * <li>{@link Graph}</li>
      * <li>{@link org.apache.tinkerpop.gremlin.structure.Graph.Variables}</li>
      * <li>{@link GraphTraversal}</li>
-     * <li>{@link B_O_P_PA_S_SE_SL_Traverser}</li>
+     * <li>{@link B_O_P_S_SE_SL_Traverser}</li>
      * <li>{@link Property}</li>
-     * <li>{@link B_O_PA_S_SE_SL_Traverser}</li>
+     * <li>{@link B_O_S_SE_SL_Traverser}</li>
      * <li>{@link Traversal}</li>
      * <li>{@link Traverser}</li>
      * <li>{@link Vertex}</li>
      * <li>{@link VertexProperty}</li>
      * </ul>
-     * <br/>
+     * <p/>
      * The test suite only enforces registration of the following core structure interfaces (i.e. these classes must
      * be registered or the tests will fail to execute):
      * <ul>
@@ -250,10 +249,10 @@ public interface GraphProvider {
      * <li>{@link Vertex}</li>
      * <li>{@link VertexProperty}</li>
      * </ul>
-     * <br/>
+     * <p/>
      * The remaining interfaces and classes should be registered however as failure to do so, might cause failures
      * in the Groovy environment testing suite.
-     * <br/>
+     * <p/>
      * Internally speaking, tests that make use of this method should bind in {@link #CORE_IMPLEMENTATIONS} to the
      * {@link Set} because these represent {@code gremlin-core} implementations that are likely not registered
      * by the vendor implementations.

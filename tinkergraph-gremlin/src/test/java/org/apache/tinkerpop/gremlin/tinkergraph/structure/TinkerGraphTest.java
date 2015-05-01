@@ -18,43 +18,23 @@
  */
 package org.apache.tinkerpop.gremlin.tinkergraph.structure;
 
-import org.apache.commons.io.FileUtils;
-import org.apache.tinkerpop.gremlin.AbstractGremlinTest;
+import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__;
+import org.apache.tinkerpop.gremlin.structure.P;
+import org.apache.tinkerpop.gremlin.structure.T;
 import org.apache.tinkerpop.gremlin.groovy.jsr223.GremlinGroovyScriptEngine;
 import org.apache.tinkerpop.gremlin.process.traversal.Step;
-import org.apache.tinkerpop.gremlin.TestHelper;
-import org.apache.tinkerpop.gremlin.algorithm.generator.DistributionGenerator;
-import org.apache.tinkerpop.gremlin.algorithm.generator.PowerLawDistribution;
-import org.apache.tinkerpop.gremlin.structure.util.star.StarGraph;
-import org.apache.tinkerpop.gremlin.process.traversal.T;
 import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
-import org.apache.tinkerpop.gremlin.process.traversal.TraversalSource;
 import org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.GraphTraversalSource;
 import org.apache.tinkerpop.gremlin.process.traversal.engine.StandardTraversalEngine;
-import org.apache.tinkerpop.gremlin.process.traversal.step.filter.HasStep;
-import org.apache.tinkerpop.gremlin.process.traversal.step.filter.IsStep;
-import org.apache.tinkerpop.gremlin.process.traversal.step.map.PropertiesStep;
-import org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect.GraphStep;
-import org.apache.tinkerpop.gremlin.process.traversal.step.util.HasContainer;
-import org.apache.tinkerpop.gremlin.structure.Direction;
 import org.apache.tinkerpop.gremlin.structure.Edge;
 import org.apache.tinkerpop.gremlin.structure.Graph;
 import org.apache.tinkerpop.gremlin.structure.Operator;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
-import org.apache.tinkerpop.gremlin.structure.io.GraphReader;
-import org.apache.tinkerpop.gremlin.structure.io.graphml.GraphMLWriter;
-import org.apache.tinkerpop.gremlin.structure.io.graphson.GraphSONMapper;
-import org.apache.tinkerpop.gremlin.structure.io.graphson.GraphSONWriter;
-import org.apache.tinkerpop.gremlin.structure.io.gryo.GryoReader;
-import org.apache.tinkerpop.gremlin.structure.io.gryo.GryoWriter;
-import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedFactory;
-import org.apache.tinkerpop.gremlin.tinkergraph.process.traversal.dsl.graph.DefaultVariableGraphTraversal;
+import org.apache.tinkerpop.gremlin.structure.io.graphml.GraphMLIo;
 import org.apache.tinkerpop.gremlin.tinkergraph.process.traversal.dsl.graph.TraversalVariable;
 import org.apache.tinkerpop.gremlin.tinkergraph.process.traversal.dsl.graph.TraversalVariablePosition;
 import org.apache.tinkerpop.gremlin.tinkergraph.process.traversal.dsl.graph.VariableGraphTraversal;
 import org.apache.tinkerpop.gremlin.tinkergraph.process.traversal.dsl.graph.VariableGraphTraversalSource;
-import org.apache.tinkerpop.gremlin.util.StreamFactory;
-import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -62,17 +42,11 @@ import javax.script.Bindings;
 import javax.script.CompiledScript;
 import javax.script.ScriptException;
 import javax.script.SimpleBindings;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
-import java.util.stream.IntStream;
 
 import static org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__.*;
 import static org.junit.Assert.assertEquals;
@@ -83,19 +57,6 @@ import static org.junit.Assert.assertTrue;
  * @author Stephen Mallette (http://stephen.genoprime.com)
  */
 public class TinkerGraphTest {
-
-    private static String tempPath;
-
-    static {
-        tempPath = TestHelper.makeTestDataPath(TinkerGraphTest.class, "tinkerpop-io").getPath() + File.separator;
-    }
-
-    @BeforeClass
-    public static void before() throws IOException {
-        final File tempDir = new File(tempPath);
-        FileUtils.deleteDirectory(tempDir);
-        if (!tempDir.mkdirs()) throw new IOException(String.format("Could not create %s", tempDir));
-    }
 
     @Test
     @Ignore
@@ -123,7 +84,7 @@ public class TinkerGraphTest {
         v7.addEdge("link", v9, "weight", 1f);
         v8.addEdge("link", v9, "weight", 7f);
 
-        g.traversal().V(v1).withSack(Float.MIN_VALUE).repeat(outE().sack(Operator.max, "weight").inV()).times(5).sack().forEachRemaining(System.out::println);
+        g.traversal().withSack(Float.MIN_VALUE).V(v1).repeat(outE().sack(Operator.max, "weight").inV()).times(5).sack().forEachRemaining(System.out::println);
     }
 
    /* @Test
@@ -140,7 +101,7 @@ public class TinkerGraphTest {
     public void benchmarkStandardTraversals() throws Exception {
         Graph graph = TinkerGraph.open();
         GraphTraversalSource g = graph.traversal();
-        graph.io().readGraphML("data/grateful-dead.xml");
+        graph.io(GraphMLIo.build()).readGraph("data/grateful-dead.xml");
         final List<Supplier<Traversal>> traversals = Arrays.asList(
                 () -> g.V().outE().inV().outE().inV().outE().inV(),
                 () -> g.V().out().out().out(),
@@ -163,20 +124,9 @@ public class TinkerGraphTest {
 
     @Test
     @Ignore
-    public void testPlay3() throws Exception {
-        TinkerGraph tg = TinkerFactory.createModern();
-        StarGraph sg = StarGraph.open();
-        tg.vertices().forEachRemaining(v -> StarGraph.addTo(sg, DetachedFactory.detach(v,true)));
-        tg.vertices(1).next().edges(Direction.BOTH).forEachRemaining(e -> StarGraph.addTo(sg, DetachedFactory.detach(e, true)));
-        sg.vertices().forEachRemaining(System.out::println);
-        sg.edges().forEachRemaining(System.out::println);
-    }
-
-    @Test
-    @Ignore
     public void testPlay4() throws Exception {
         Graph graph = TinkerGraph.open();
-        graph.io().readGraphML("/Users/marko/software/tinkerpop/tinkerpop3/data/grateful-dead.xml");
+        graph.io(GraphMLIo.build()).readGraph("/Users/marko/software/tinkerpop/tinkerpop3/data/grateful-dead.xml");
         GraphTraversalSource g = graph.traversal();
         final List<Supplier<Traversal>> traversals = Arrays.asList(
                 () -> g.V().has(T.label, "song").out().groupCount().<Vertex>by(t ->
@@ -208,210 +158,18 @@ public class TinkerGraphTest {
     @Ignore
     public void testPlayDK() throws Exception {
         GraphTraversalSource g = TinkerFactory.createModern().traversal();
-        Traversal t = g.V().hasLabel("person").as("person").local(bothE().label().groupCount("x").cap("x")).as("relations").select().by("name").by();
-        t.forEachRemaining(System.out::println);
-        System.out.println("--");
-
-        t = g.V().match("a",
-                as("a").out("knows").as("b"),
-                as("b").out("created").has("name", "lop"),
-                as("b").match("a1",
-                        as("a1").out("created").as("b1"),
-                        as("b1").in("created").as("c1")).select("c1").as("c")).<String>select().by("name");
+        Traversal t = g.V().<Integer>values("age").is(P.gte(29)).is(P.lt(34));
         t.forEachRemaining(System.out::println);
     }
 
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
     @Test
-    public void shouldWriteClassicGraphAsGryo() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-classic.kryo");
-        GryoWriter.build().create().writeGraph(os, TinkerFactory.createClassic());
-        os.close();
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteModernGraphAsGryo() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-modern.kryo");
-        GryoWriter.build().create().writeGraph(os, TinkerFactory.createModern());
-        os.close();
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteCrewGraphAsGryo() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-crew.kryo");
-        GryoWriter.build().create().writeGraph(os, TinkerFactory.createTheCrew());
-        os.close();
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteClassicVerticesAsGryo() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-classic-vertices.kryo");
-        GryoWriter.build().create().writeVertices(os, TinkerFactory.createClassic().traversal().V(), Direction.BOTH);
-        os.close();
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteClassicVerticesAsGraphSON() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-classic-vertices.ldjson");
-        GraphSONWriter.build().create().writeVertices(os, TinkerFactory.createClassic().traversal().V(), Direction.BOTH);
-        os.close();
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteModernVerticesAsGryo() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-modern-vertices.kryo");
-        GryoWriter.build().create().writeVertices(os, TinkerFactory.createModern().traversal().V(), Direction.BOTH);
-        os.close();
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteModernVerticesAsGraphSON() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-modern-vertices.ldjson");
-        GraphSONWriter.build().create().writeVertices(os, TinkerFactory.createModern().traversal().V(), Direction.BOTH);
-        os.close();
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteCrewVerticesAsGraphSON() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-crew-vertices.ldjson");
-        GraphSONWriter.build().create().writeVertices(os, TinkerFactory.createTheCrew().traversal().V(), Direction.BOTH);
-        os.close();
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteCrewVerticesAsGryo() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-crew-vertices.kryo");
-        GryoWriter.build().create().writeVertices(os, TinkerFactory.createTheCrew().traversal().V(), Direction.BOTH);
-        os.close();
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteClassicGraphAsGraphML() throws IOException {
-        try (final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-classic.xml")) {
-            GraphMLWriter.build().create().writeGraph(os, TinkerFactory.createClassic());
-        }
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteModernGraphAsGraphML() throws IOException {
-        try (final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-modern.xml")) {
-            GraphMLWriter.build().create().writeGraph(os, TinkerFactory.createModern());
-        }
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteClassicGraphAsGraphSONNoTypes() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-classic.json");
-        GraphSONWriter.build().create().writeGraph(os, TinkerFactory.createClassic());
-        os.close();
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteModernGraphAsGraphSONNoTypes() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-modern.json");
-        GraphSONWriter.build().create().writeGraph(os, TinkerFactory.createModern());
-        os.close();
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteCrewGraphAsGraphSONNoTypes() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-crew.json");
-        GraphSONWriter.build().create().writeGraph(os, TinkerFactory.createTheCrew());
-        os.close();
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteClassicGraphNormalizedAsGraphSON() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-classic-normalized.json");
-        GraphSONWriter.build().mapper(GraphSONMapper.build().normalize(true).create()).create().writeGraph(os, TinkerFactory.createClassic());
-        os.close();
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteModernGraphNormalizedAsGraphSON() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-modern-normalized.json");
-        GraphSONWriter.build().mapper(GraphSONMapper.build().normalize(true).create()).create().writeGraph(os, TinkerFactory.createModern());
-        os.close();
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteClassicGraphAsGraphSONWithTypes() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-classic-typed.json");
-        GraphSONWriter.build().mapper(GraphSONMapper.build().embedTypes(true).create())
-                .create().writeGraph(os, TinkerFactory.createClassic());
-        os.close();
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteModernGraphAsGraphSONWithTypes() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-modern-typed.json");
-        GraphSONWriter.build().mapper(GraphSONMapper.build().embedTypes(true).create())
-                .create().writeGraph(os, TinkerFactory.createModern());
-        os.close();
-    }
-
-    /**
-     * No assertions.  Just write out the graph for convenience.
-     */
-    @Test
-    public void shouldWriteCrewGraphAsGraphSONWithTypes() throws IOException {
-        final OutputStream os = new FileOutputStream(tempPath + "tinkerpop-crew-typed.json");
-        GraphSONWriter.build().mapper(GraphSONMapper.build().embedTypes(true).create())
-                .create().writeGraph(os, TinkerFactory.createTheCrew());
-        os.close();
+    @Ignore
+    public void testPlay5() throws Exception {
+        GraphTraversalSource g = TinkerFactory.createModern().traversal();
+        //g.V().has("name", "gremlin").inE("uses").order().by("skill", Order.incr).as("a").outV().as("b").path().forEachRemaining(System.out::println);
+        //g.V().has("name", "gremlin").inE("uses").order().by("skill", Order.incr).as("a").outV().as("b").select().by("skill").by("name").forEachRemaining(System.out::println);
+        //g.V().label().groupCount().as("x").select().forEachRemaining(System.out::println);
+        g.V().choose(__.outE().count().is(0L),__.as("x"),__.as("y")).select("x","y").forEachRemaining(System.out::println);
     }
 
     @Test
@@ -503,10 +261,10 @@ public class TinkerGraphTest {
         // is used because only "stephen" ages should pass through the pipeline due to the inclusion of the
         // key index lookup on "name".  If there's an age of something other than 35 in the pipeline being evaluated
         // then something is wrong.
-        assertEquals(new Long(1), g.traversal().V().has("age", (t, u) -> {
+        assertEquals(new Long(1), g.traversal().V().has("age", P.test((t, u) -> {
             assertEquals(35, t);
             return true;
-        }, 35).has("name", "stephen").count().next());
+        },35)).has("name", "stephen").count().next());
     }
 
     @Ignore
@@ -524,16 +282,16 @@ public class TinkerGraphTest {
         // is used because only "stephen" ages should pass through the pipeline due to the inclusion of the
         // key index lookup on "name".  If there's an age of something other than 35 in the pipeline being evaluated
         // then something is wrong.
-        assertEquals(new Long(2), g.traversal().V().has("age", (t, u) -> {
+        assertEquals(new Long(2), g.traversal().V().has("age", P.test((t, u) -> {
             assertEquals(35, t);
             return true;
-        }, 35).has("name", "stephen").count().next());
+        },35)).has("name", "stephen").count().next());
 
         v.remove();
-        assertEquals(new Long(1), g.traversal().V().has("age", (t, u) -> {
+        assertEquals(new Long(1), g.traversal().V().has("age", P.test((t, u) -> {
             assertEquals(35, t);
             return true;
-        }, 35).has("name", "stephen").count().next());
+        },35)).has("name", "stephen").count().next());
     }
 
     @Ignore
@@ -547,10 +305,10 @@ public class TinkerGraphTest {
         // a tricky way to evaluate if indices are actually being used is to pass a fake BiPredicate to has()
         // to get into the Pipeline and evaluate what's going through it.  in this case, we know that at index
         // is not used because "stephen" and "marko" ages both pass through the pipeline.
-        assertEquals(new Long(1), g.traversal().V().has("age", (t, u) -> {
+        assertEquals(new Long(1), g.traversal().V().has("age", P.test((t, u) -> {
             assertTrue(t.equals(35) || t.equals(29));
             return true;
-        }, 35).has("name", "stephen").count().next());
+        }, 35)).has("name", "stephen").count().next());
 
         g.createIndex("name", Vertex.class);
 
@@ -558,10 +316,10 @@ public class TinkerGraphTest {
         // is used because only "stephen" ages should pass through the pipeline due to the inclusion of the
         // key index lookup on "name".  If there's an age of something other than 35 in the pipeline being evaluated
         // then something is wrong.
-        assertEquals(new Long(1), g.traversal().V().has("age", (t, u) -> {
+        assertEquals(new Long(1), g.traversal().V().has("age", P.test((t, u) -> {
             assertEquals(35, t);
             return true;
-        }, 35).has("name", "stephen").count().next());
+        }, 35)).has("name", "stephen").count().next());
     }
 
     @Ignore
@@ -579,10 +337,10 @@ public class TinkerGraphTest {
         // is used because only oid 1 should pass through the pipeline due to the inclusion of the
         // key index lookup on "oid".  If there's an weight of something other than 0.5f in the pipeline being
         // evaluated then something is wrong.
-        assertEquals(new Long(1), g.traversal().E().has("weight", (t, u) -> {
+        assertEquals(new Long(1), g.traversal().E().has("weight", P.test((t, u) -> {
             assertEquals(0.5f, t);
             return true;
-        }, 0.5).has("oid", "1").count().next());
+        }, 0.5)).has("oid", "1").count().next());
     }
 
     @Ignore
@@ -601,16 +359,16 @@ public class TinkerGraphTest {
         // is used because only oid 1 should pass through the pipeline due to the inclusion of the
         // key index lookup on "oid".  If there's an weight of something other than 0.5f in the pipeline being
         // evaluated then something is wrong.
-        assertEquals(new Long(2), g.traversal().E().has("weight", (t, u) -> {
+        assertEquals(new Long(2), g.traversal().E().has("weight", P.test((t, u) -> {
             assertEquals(0.5f, t);
             return true;
-        }, 0.5).has("oid", "1").count().next());
+        }, 0.5)).has("oid", "1").count().next());
 
         e.remove();
-        assertEquals(new Long(1), g.traversal().E().has("weight", (t, u) -> {
+        assertEquals(new Long(1), g.traversal().E().has("weight", P.test((t, u) -> {
             assertEquals(0.5f, t);
             return true;
-        }, 0.5).has("oid", "1").count().next());
+        }, 0.5)).has("oid", "1").count().next());
     }
 
     @Ignore
@@ -625,10 +383,10 @@ public class TinkerGraphTest {
         // a tricky way to evaluate if indices are actually being used is to pass a fake BiPredicate to has()
         // to get into the Pipeline and evaluate what's going through it.  in this case, we know that at index
         // is not used because "1" and "2" weights both pass through the pipeline.
-        assertEquals(new Long(1), g.traversal().E().has("weight", (t, u) -> {
+        assertEquals(new Long(1), g.traversal().E().has("weight", P.test((t, u) -> {
             assertTrue(t.equals(0.5f) || t.equals(0.6f));
             return true;
-        }, 0.5).has("oid", "1").count().next());
+        }, 0.5)).has("oid", "1").count().next());
 
         g.createIndex("oid", Edge.class);
 
@@ -636,95 +394,10 @@ public class TinkerGraphTest {
         // is used because only oid 1 should pass through the pipeline due to the inclusion of the
         // key index lookup on "oid".  If there's an weight of something other than 0.5f in the pipeline being
         // evaluated then something is wrong.
-        assertEquals(new Long(1), g.traversal().E().has("weight", (t, u) -> {
+        assertEquals(new Long(1), g.traversal().E().has("weight", P.test((t, u) -> {
             assertEquals(0.5f, t);
             return true;
-        }, 0.5).has("oid", "1").count().next());
-    }
-
-    @Test
-    public void shouldWriteSampleForGremlinServer() throws IOException {
-        final Graph g = TinkerGraph.open();
-        IntStream.range(0, 10000).forEach(i -> g.addVertex("oid", i));
-        DistributionGenerator.build(g)
-                .label("knows")
-                .seedGenerator(() -> 987654321l)
-                .outDistribution(new PowerLawDistribution(2.1))
-                .inDistribution(new PowerLawDistribution(2.1))
-                .expectedNumEdges(100000).create().generate();
-
-        final OutputStream os = new FileOutputStream(tempPath + "sample.kryo");
-        GryoWriter.build().create().writeGraph(os, g);
-        os.close();
-    }
-
-    /**
-     * This test helps with data conversions on Grateful Dead.  No Assertions...run as needed. Never read from the
-     * GraphML source as it will always use a String identifier.
-     */
-    @Test
-    public void shouldWriteGratefulDead() throws IOException {
-        final Graph g = TinkerGraph.open();
-
-        final GraphReader reader = GryoReader.build().create();
-        try (final InputStream stream = AbstractGremlinTest.class.getResourceAsStream("/org/apache/tinkerpop/gremlin/structure/io/gryo/grateful-dead.kryo")) {
-            reader.readGraph(stream, g);
-        }
-
-        /* keep this hanging around because changes to gryo format will need grateful dead generated from json so you can generate the gio
-        final GraphSONMapper mapper = GraphSONMapper.build().embedTypes(true).create();
-        final GraphReader reader = org.apache.tinkerpop.gremlin.structure.io.graphson.GraphSONReader.build().mapper(mapper).create();
-        try (final InputStream stream = AbstractGremlinTest.class.getResourceAsStream("/org/apache/tinkerpop/gremlin/structure/io/graphson/grateful-dead.json")) {
-            reader.readGraph(stream, g);
-        }
-        */
-
-        final Graph ng = TinkerGraph.open();
-        g.traversal().V().sideEffect(ov -> {
-            final Vertex v = ov.get();
-            if (v.label().equals("song"))
-                ng.addVertex(T.id, Integer.parseInt(v.id().toString()), T.label, "song", "name", v.value("name"), "performances", v.property("performances").orElse(0), "songType", v.property("songType").orElse(""));
-            else if (v.label().equals("artist"))
-                ng.addVertex(T.id, Integer.parseInt(v.id().toString()), T.label, "artist", "name", v.value("name"));
-            else
-                throw new RuntimeException("damn");
-        }).iterate();
-
-        g.traversal().E().sideEffect(oe -> {
-            final Edge e = oe.get();
-            final Vertex v2 = ng.traversal().V(Integer.parseInt(e.inVertex().id().toString())).next();
-            final Vertex v1 = ng.traversal().V(Integer.parseInt(e.outVertex().id().toString())).next();
-
-            if (e.label().equals("followedBy"))
-                v1.addEdge("followedBy", v2, T.id, Integer.parseInt(e.id().toString()), "weight", e.value("weight"));
-            else if (e.label().equals("sungBy"))
-                v1.addEdge("sungBy", v2, T.id, Integer.parseInt(e.id().toString()));
-            else if (e.label().equals("writtenBy"))
-                v1.addEdge("writtenBy", v2, T.id, Integer.parseInt(e.id().toString()));
-            else
-                throw new RuntimeException("bah");
-
-        }).iterate();
-
-        final OutputStream os = new FileOutputStream(tempPath + "grateful-dead.kryo");
-        GryoWriter.build().create().writeGraph(os, ng);
-        os.close();
-
-        final OutputStream os2 = new FileOutputStream(tempPath + "grateful-dead.json");
-        GraphSONWriter.build().mapper(GraphSONMapper.build().embedTypes(true).create()).create().writeGraph(os2, g);
-        os2.close();
-
-        final OutputStream os3 = new FileOutputStream(tempPath + "grateful-dead.xml");
-        GraphMLWriter.build().create().writeGraph(os3, g);
-        os3.close();
-
-        final OutputStream os4 = new FileOutputStream(tempPath + "grateful-dead-vertices.kryo");
-        GryoWriter.build().create().writeVertices(os4, g.traversal().V(), Direction.BOTH);
-        os.close();
-
-        final OutputStream os5 = new FileOutputStream(tempPath + "grateful-dead-vertices.ldjson");
-        GraphSONWriter.build().create().writeVertices(os5, g.traversal().V(), Direction.BOTH);
-        os.close();
+        }, 0.5)).has("oid", "1").count().next());
     }
 
     @Test

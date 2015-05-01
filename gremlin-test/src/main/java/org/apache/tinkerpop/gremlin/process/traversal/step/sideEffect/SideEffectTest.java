@@ -52,7 +52,7 @@ public abstract class SideEffectTest extends AbstractGremlinTest {
         printTraversalForm(traversal);
         assertEquals(traversal.next(), "marko");
         assertFalse(traversal.hasNext());
-        assertEquals(convertToVertexId("marko"), traversal.asAdmin().getSideEffects().<List<Vertex>>get("a").get(0).id());
+        assertEquals(convertToVertexId("marko"), traversal.asAdmin().getSideEffects().<List<Vertex>>get("a").get().get(0).id());
     }
 
     @Test
@@ -61,7 +61,7 @@ public abstract class SideEffectTest extends AbstractGremlinTest {
         final Traversal<Vertex, String> traversal = get_g_VX1X_out_sideEffectXincr_cX_name(convertToVertexId("marko"));
         printTraversalForm(traversal);
         assert_g_v1_out_sideEffectXincr_cX_valueXnameX(traversal);
-        assertEquals(new Integer(3), traversal.asAdmin().getSideEffects().<List<Integer>>get("c").get(0));
+        assertEquals(new Integer(3), traversal.asAdmin().getSideEffects().<List<Integer>>get("c").get().get(0));
     }
 
     private void assert_g_v1_out_sideEffectXincr_cX_valueXnameX(final Iterator<String> traversal) {
@@ -88,7 +88,7 @@ public abstract class SideEffectTest extends AbstractGremlinTest {
 
         @Override
         public Traversal<Vertex, String> get_g_VX1X_sideEffectXstore_aX_name(final Object v1Id) {
-            return g.V(v1Id).withSideEffect("a", ArrayList::new).sideEffect(traverser -> {
+            return g.withSideEffect("a", ArrayList::new).V(v1Id).sideEffect(traverser -> {
                 traverser.<List>sideEffects("a").clear();
                 traverser.<List<Vertex>>sideEffects("a").add(traverser.get());
             }).values("name");
@@ -96,11 +96,11 @@ public abstract class SideEffectTest extends AbstractGremlinTest {
 
         @Override
         public Traversal<Vertex, String> get_g_VX1X_out_sideEffectXincr_cX_name(final Object v1Id) {
-            return g.V(v1Id).withSideEffect("c", () -> {
+            return g.withSideEffect("c", () -> {
                 final List<Integer> list = new ArrayList<>();
                 list.add(0);
                 return list;
-            }).out().sideEffect(traverser -> {
+            }).V(v1Id).out().sideEffect(traverser -> {
                 Integer temp = traverser.<List<Integer>>sideEffects("c").get(0);
                 traverser.<List<Integer>>sideEffects("c").clear();
                 traverser.<List<Integer>>sideEffects("c").add(temp + 1);

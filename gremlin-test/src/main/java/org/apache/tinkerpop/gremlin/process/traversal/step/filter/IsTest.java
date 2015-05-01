@@ -20,17 +20,17 @@ package org.apache.tinkerpop.gremlin.process.traversal.step.filter;
 
 import org.apache.tinkerpop.gremlin.LoadGraphWith;
 import org.apache.tinkerpop.gremlin.process.AbstractGremlinProcessTest;
+import org.apache.tinkerpop.gremlin.process.UseEngine;
 import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
 import org.apache.tinkerpop.gremlin.process.traversal.TraversalEngine;
-import org.apache.tinkerpop.gremlin.process.UseEngine;
-import org.apache.tinkerpop.gremlin.structure.Compare;
+import org.apache.tinkerpop.gremlin.structure.P;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.junit.Test;
 
 import java.util.Arrays;
 
 import static org.apache.tinkerpop.gremlin.LoadGraphWith.GraphData.MODERN;
-import static org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__.*;
+import static org.apache.tinkerpop.gremlin.process.traversal.dsl.graph.__.in;
 import static org.junit.Assert.*;
 
 /**
@@ -51,7 +51,7 @@ public abstract class IsTest extends AbstractGremlinProcessTest {
     @Test
     @LoadGraphWith(MODERN)
     public void g_V_valuesXageX_isX32X() {
-        Traversal<Vertex, Integer> traversal = get_g_V_valuesXageX_isX32X();
+        final Traversal<Vertex, Integer> traversal = get_g_V_valuesXageX_isX32X();
         printTraversalForm(traversal);
         assertTrue(traversal.hasNext());
         assertEquals(Integer.valueOf(32), traversal.next());
@@ -61,7 +61,7 @@ public abstract class IsTest extends AbstractGremlinProcessTest {
     @Test
     @LoadGraphWith(MODERN)
     public void g_V_valuesXageX_isXlte_30X() {
-        Traversal<Vertex, Integer> traversal = get_g_V_valuesXageX_isXlte_30X();
+        final Traversal<Vertex, Integer> traversal = get_g_V_valuesXageX_isXlte_30X();
         printTraversalForm(traversal);
         checkResults(Arrays.asList(27, 29), traversal);
     }
@@ -69,7 +69,7 @@ public abstract class IsTest extends AbstractGremlinProcessTest {
     @Test
     @LoadGraphWith(MODERN)
     public void g_V_valuesXageX_isXgte_29X_isXlt_34X() {
-        Traversal<Vertex, Integer> traversal = get_g_V_valuesXageX_isXgte_29X_isXlt_34X();
+        final Traversal<Vertex, Integer> traversal = get_g_V_valuesXageX_isXgte_29X_isXlt_34X();
         printTraversalForm(traversal);
         checkResults(Arrays.asList(29, 32), traversal);
     }
@@ -77,7 +77,7 @@ public abstract class IsTest extends AbstractGremlinProcessTest {
     @Test
     @LoadGraphWith(MODERN)
     public void g_V_hasXinXcreatedX_count_isX1XX_valuesXnameX() {
-        Traversal<Vertex, String> traversal = get_g_V_hasXinXcreatedX_count_isX1XX_valuesXnameX();
+        final Traversal<Vertex, String> traversal = get_g_V_hasXinXcreatedX_count_isX1XX_valuesXnameX();
         printTraversalForm(traversal);
         assertTrue(traversal.hasNext());
         assertEquals("ripple", traversal.next());
@@ -87,7 +87,7 @@ public abstract class IsTest extends AbstractGremlinProcessTest {
     @Test
     @LoadGraphWith(MODERN)
     public void g_V_hasXinXcreatedX_count_isXgte_2XX_valuesXnameX() {
-        Traversal<Vertex, String> traversal = get_g_V_hasXinXcreatedX_count_isXgte_2XX_valuesXnameX();
+        final Traversal<Vertex, String> traversal = get_g_V_hasXinXcreatedX_count_isXgte_2XX_valuesXnameX();
         printTraversalForm(traversal);
         assertTrue(traversal.hasNext());
         assertEquals("lop", traversal.next());
@@ -104,22 +104,22 @@ public abstract class IsTest extends AbstractGremlinProcessTest {
 
         @Override
         public Traversal<Vertex, Integer> get_g_V_valuesXageX_isXlte_30X() {
-            return g.V().<Integer>values("age").is(Compare.lte, 30);
+            return g.V().<Integer>values("age").is(P.lte(30));
         }
 
         @Override
         public Traversal<Vertex, Integer> get_g_V_valuesXageX_isXgte_29X_isXlt_34X() {
-            return g.V().<Integer>values("age").is(Compare.gte, 29).is(Compare.lt, 34);
+            return g.V().<Integer>values("age").is(P.gte(29)).is(P.lt(34));
         }
 
         @Override
         public Traversal<Vertex, String> get_g_V_hasXinXcreatedX_count_isX1XX_valuesXnameX() {
-            return g.V().has(in("created").count().is(1l)).values("name");
+            return g.V().has(in("created").count().is(1)).values("name");
         }
 
         @Override
         public Traversal<Vertex, String> get_g_V_hasXinXcreatedX_count_isXgte_2XX_valuesXnameX() {
-            return g.V().has(in("created").count().is(Compare.gte, 2l)).values("name");
+            return g.V().has(in("created").count().is(P.gte(2l))).values("name");
         }
     }
 }

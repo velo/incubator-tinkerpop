@@ -20,7 +20,8 @@ package org.apache.tinkerpop.gremlin.process.traversal.step.filter;
 
 import org.apache.tinkerpop.gremlin.LoadGraphWith;
 import org.apache.tinkerpop.gremlin.process.AbstractGremlinProcessTest;
-import org.apache.tinkerpop.gremlin.process.traversal.T;
+import org.apache.tinkerpop.gremlin.structure.P;
+import org.apache.tinkerpop.gremlin.structure.T;
 import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
 import org.apache.tinkerpop.gremlin.process.traversal.TraversalEngine;
 import org.apache.tinkerpop.gremlin.process.UseEngine;
@@ -80,7 +81,7 @@ public abstract class HasTest extends AbstractGremlinProcessTest {
     @Test
     @LoadGraphWith(MODERN)
     public void g_V_outXknowsX_hasXoutXcreatedXX_valuesXnameX() {
-        Traversal<Vertex, String> traversal = get_g_V_outXknowsX_hasXoutXcreatedXX_name();
+        final Traversal<Vertex, String> traversal = get_g_V_outXknowsX_hasXoutXcreatedXX_name();
         printTraversalForm(traversal);
         checkResults(Arrays.asList("josh"), traversal);
     }
@@ -173,7 +174,7 @@ public abstract class HasTest extends AbstractGremlinProcessTest {
     @Test
     @LoadGraphWith(MODERN)
     public void g_V_hasXblahX() {
-        assumeTrue(graphMeetsTestRequirements());
+        //assumeTrue(graphMeetsTestRequirements());
         final Traversal<Vertex, Vertex> traversal = get_g_V_hasXblahX();
         printTraversalForm(traversal);
         assertFalse(traversal.hasNext());
@@ -184,7 +185,7 @@ public abstract class HasTest extends AbstractGremlinProcessTest {
     @LoadGraphWith(MODERN)
     public void g_EX7X_hasXlabelXknowsX() {
         //System.out.println(convertToEdgeId("marko", "knows", "vadas"));
-        Traversal<Edge, Edge> traversal = get_g_EX7X_hasLabelXknowsX(convertToEdgeId("marko", "knows", "vadas"));
+        final Traversal<Edge, Edge> traversal = get_g_EX7X_hasLabelXknowsX(convertToEdgeId("marko", "knows", "vadas"));
         printTraversalForm(traversal);
         int counter = 0;
         while (traversal.hasNext()) {
@@ -209,7 +210,7 @@ public abstract class HasTest extends AbstractGremlinProcessTest {
 
     @Test
     @LoadGraphWith(CREW)
-    public void g_E_hasXlabelXuses_traversesX() {
+    public void g_E_hasLabelXuses_traversesX() {
         final Traversal<Edge, Edge> traversal = get_g_E_hasLabelXuses_traversesX();
         printTraversalForm(traversal);
         int counter = 0;
@@ -223,7 +224,7 @@ public abstract class HasTest extends AbstractGremlinProcessTest {
 
     @Test
     @LoadGraphWith(CREW)
-    public void g_V_hasXlabelXperson_software_blahX() {
+    public void g_V_hasLabelXperson_software_blahX() {
         final Traversal<Vertex, Vertex> traversal = get_g_V_hasLabelXperson_software_blahX();
         printTraversalForm(traversal);
         int counter = 0;
@@ -322,7 +323,7 @@ public abstract class HasTest extends AbstractGremlinProcessTest {
 
         @Override
         public Traversal<Vertex, Vertex> get_g_VX1X_hasXage_gt_30X(final Object v1Id) {
-            return g.V(v1Id).has("age", Compare.gt, 30);
+            return g.V(v1Id).has("age", P.gt(30));
         }
 
         @Override
@@ -332,7 +333,7 @@ public abstract class HasTest extends AbstractGremlinProcessTest {
 
         @Override
         public Traversal<Vertex, Vertex> get_g_V_hasXage_gt_30X() {
-            return g.V().has("age", Compare.gt, 30);
+            return g.V().has("age", P.gt(30));
         }
 
         @Override
@@ -362,7 +363,7 @@ public abstract class HasTest extends AbstractGremlinProcessTest {
 
         @Override
         public Traversal<Vertex, Vertex> get_g_VX1X_outE_hasXweight_inside_0_06X_inV(final Object v1Id) {
-            return g.V(v1Id).outE().has("weight", Compare.inside, Arrays.asList(0.0d, 0.6d)).inV();
+            return g.V(v1Id).outE().has("weight", P.inside(0.0d, 0.6d)).inV();
         }
     }
 }

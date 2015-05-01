@@ -41,7 +41,7 @@ mvn -Dmaven.javadoc.skip=true --projects tinkergraph-gremlin test
 ----
 ** Clean the `.groovy/grapes/org.apache.tinkerpop` directory on build: `mvn clean install -DcleanGrapes`
 * Regenerate test data (only necessary given changes to IO classes): `mvn clean install -Dio` from `tinkergraph-gremlin` directory
-** If there are changes to the Gryo format, it may be necessary to generate the Grateful Dead dataset from GraphSON (see `TinkerGraphTest.shouldWriteGratefulDead`)
+** If there are changes to the Gryo format, it may be necessary to generate the Grateful Dead dataset from GraphSON (see `IoDataGenerationTest.shouldWriteGratefulDead`)
 * Check license headers are present: `mvn apache-rat:check`
 * Build AsciiDocs: `docs/preprocessor/preprocess.sh && mvn process-resources -Dasciidoc`
 * Build JavaDocs: `mvn process-resources -Djavadoc`
@@ -87,9 +87,13 @@ Release Process
 . `git commit -a -m "TinkerPop x.y.z release"` and `git push`
 . `git tag -a -m "TinkerPop x.y.z release" x.y.z` and `git push --tags`
 . `bin/publish-docs.sh <username>`
-. `mvn deploy -Papache-release -DcreateChecksum=true -Dmaven.test.skip=true`- deploy signed artifacts with checksums to Apache Nexus for release voting
-. Close the staging repository
+. Upload artifacts to `https://dist.apache.org/repos/dist/dev/incubator/tinkerpop`
 . Submit for `[VOTE]` at `general@incubator.apache.org`
+. `mvn deploy -Papache-release -DcreateChecksum=true -Dmaven.test.skip=true`- deploy signed artifacts with checksums to Apache Nexus
+. Review and close the staging repository
+. Upload artifacts to `https://dist.apache.org/repos/dist/release/incubator/tinkerpop`
+. Update homepage with references to latest distribution.
+. Announce release on `dev@`/`gremlin-users@` mailing lists and tweet from `@apachetinkerpop`.
 
 Issue Tracker Conventions
 ~~~~~~~~~~~~~~~~~~~~~~~~~

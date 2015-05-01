@@ -22,7 +22,6 @@ import org.apache.tinkerpop.gremlin.process.traversal.Path;
 import org.apache.tinkerpop.gremlin.process.traversal.Scope;
 import org.apache.tinkerpop.gremlin.process.traversal.Scopeable;
 import org.apache.tinkerpop.gremlin.process.traversal.Step;
-import org.apache.tinkerpop.gremlin.process.traversal.T;
 import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
 import org.apache.tinkerpop.gremlin.process.traversal.Traverser;
 import org.apache.tinkerpop.gremlin.process.traversal.lambda.ElementValueTraversal;
@@ -53,7 +52,6 @@ import org.apache.tinkerpop.gremlin.process.traversal.step.filter.HasTraversalSt
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.IsStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.LambdaFilterStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.OrStep;
-import org.apache.tinkerpop.gremlin.process.traversal.step.filter.RangeGlobalStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.RetainStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.SampleGlobalStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.filter.SimplePathStep;
@@ -88,7 +86,6 @@ import org.apache.tinkerpop.gremlin.process.traversal.step.map.PathStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.PropertiesStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.PropertyMapStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.PropertyValueStep;
-import org.apache.tinkerpop.gremlin.process.traversal.step.map.RangeLocalStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.SackStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.SampleLocalStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.SelectOneStep;
@@ -128,8 +125,10 @@ import org.apache.tinkerpop.gremlin.structure.Direction;
 import org.apache.tinkerpop.gremlin.structure.Edge;
 import org.apache.tinkerpop.gremlin.structure.Element;
 import org.apache.tinkerpop.gremlin.structure.Order;
+import org.apache.tinkerpop.gremlin.structure.P;
 import org.apache.tinkerpop.gremlin.structure.Property;
 import org.apache.tinkerpop.gremlin.structure.PropertyType;
+import org.apache.tinkerpop.gremlin.structure.T;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.apache.tinkerpop.gremlin.structure.VertexProperty;
 import org.apache.tinkerpop.gremlin.util.function.ConstantSupplier;
@@ -455,12 +454,8 @@ public interface VariableGraphTraversal<S, E> extends Traversal<S, E> {
         return this.asAdmin().addStep(new ExceptStep<>(this.asAdmin(), exceptCollection));
     }
 
-    public default <E2> VariableGraphTraversal<S, Map<String, E2>> where(final String firstKey, final String secondKey, final BiPredicate predicate) {
-        return this.asAdmin().addStep(new WhereStep(this.asAdmin(), firstKey, secondKey, predicate));
-    }
-
-    public default <E2> VariableGraphTraversal<S, Map<String, E2>> where(final String firstKey, final BiPredicate predicate, final String secondKey) {
-        return this.where(firstKey, secondKey, predicate);
+    public default <E2> VariableGraphTraversal<S, Map<String, E2>> where(final String firstKey, final P<?> predicate) {
+        return this.asAdmin().addStep(new WhereStep<>(this.asAdmin(), firstKey, predicate));
     }
 
     public default <E2> VariableGraphTraversal<S, Map<String, E2>> where(final Traversal constraint) {
@@ -521,11 +516,13 @@ public interface VariableGraphTraversal<S, E> extends Traversal<S, E> {
         return values.length == 1 ? this.has(T.value, values[0]) : this.has(T.value, Contains.within, Arrays.asList(values));
     }
 
-    public default VariableGraphTraversal<S, E> is(final Object value) {
-        return this.is(Compare.eq, value);
+    public default VariableGraphTraversal<S, E> is(final P<E>... predicates) {
+        return this.asAdmin().addStep(new IsStep<>(this.asAdmin(), predicates));
     }
 
-    public VariableGraphTraversal<S, E> is(final BiPredicate predicate, final Object value);
+    public default VariableGraphTraversal<S, E> is(final Object value) {
+        return this.is(new P[]{value instanceof P ? (P) value : P.eq(value)});
+    }
 
     public default VariableGraphTraversal<S, E> coin(final double probability) {
         return this.asAdmin().addStep(new CoinStep<>(this.asAdmin(), probability));

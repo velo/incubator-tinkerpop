@@ -51,14 +51,16 @@ class SugarLoader {
         GraphTraversal.metaClass.methodMissing = { final String name, final def args ->
             if (name.toLowerCase().equals(FROM))
                 return ((GraphTraversal.Admin) args[0]).addStep(((GraphTraversal.Admin) delegate).getSteps()[0]);
-            else if (Compare.hasCompare(name))
-                return ((GraphTraversal) delegate).is(Compare.valueOf(name), *args);
             else
                 return ((GraphTraversal) delegate).values(name);
         }
 
         GraphTraversalSource.metaClass.getProperty = { final String key ->
-            GraphTraversalContextCategory.get((GraphTraversalSource) delegate, key);
+            GraphTraversalSourceCategory.get((GraphTraversalSource) delegate, key);
+        }
+
+        GraphTraversalSource.GraphTraversalSourceStub.metaClass.getProperty = { final String key ->
+            GraphTraversalSourceStubCategory.get((GraphTraversalSource.GraphTraversalSourceStub) delegate, key);
         }
 
         // __.age and __.out
@@ -84,7 +86,8 @@ class SugarLoader {
         }
 
         Traverser.metaClass.mixin(TraverserCategory.class);
-        GraphTraversalSource.metaClass.mixin(GraphTraversalContextCategory.class);
+        GraphTraversalSource.metaClass.mixin(GraphTraversalSourceCategory.class);
+        GraphTraversalSource.GraphTraversalSourceStub.metaClass.mixin(GraphTraversalSourceStubCategory.class);
         GraphTraversal.metaClass.mixin(GraphTraversalCategory.class);
         Vertex.metaClass.mixin(VertexCategory.class);
         Edge.metaClass.mixin(ElementCategory.class);
@@ -148,16 +151,35 @@ class SugarLoader {
         }
     }
 
-    public static class GraphTraversalContextCategory {
+    public static class GraphTraversalSourceCategory {
 
         private static final String V = "V";
         private static final String E = "E";
 
-        public static final get(final GraphTraversalSource graphTraversalContext, final String key) {
+        public static final get(final GraphTraversalSource graphTraversalSource, final String key) {
             if (key.equals(V))
-                return graphTraversalContext.V();
+                return graphTraversalSource.V();
             else if (key.equals(E))
-                return graphTraversalContext.E();
+                return graphTraversalSource.E();
+            else
+                throw new UnsupportedOperationException("The provided key does not reference a known method: " + key);
+        }
+
+        /*public String toString() {
+            return StringFactory.graphString(this.metaClass.owner, "");
+        }*/
+    }
+
+    public static class GraphTraversalSourceStubCategory {
+
+        private static final String V = "V";
+        private static final String E = "E";
+
+        public static final get(final GraphTraversalSource.GraphTraversalSourceStub graphTraversalSourceStub, final String key) {
+            if (key.equals(V))
+                return graphTraversalSourceStub.V();
+            else if (key.equals(E))
+                return graphTraversalSourceStub.E();
             else
                 throw new UnsupportedOperationException("The provided key does not reference a known method: " + key);
         }

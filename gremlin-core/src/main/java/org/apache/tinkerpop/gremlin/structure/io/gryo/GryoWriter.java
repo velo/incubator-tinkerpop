@@ -20,24 +20,26 @@ package org.apache.tinkerpop.gremlin.structure.io.gryo;
 
 import org.apache.tinkerpop.gremlin.structure.Direction;
 import org.apache.tinkerpop.gremlin.structure.Edge;
-import org.apache.tinkerpop.gremlin.structure.Element;
 import org.apache.tinkerpop.gremlin.structure.Graph;
+import org.apache.tinkerpop.gremlin.structure.Property;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
+import org.apache.tinkerpop.gremlin.structure.VertexProperty;
 import org.apache.tinkerpop.gremlin.structure.io.GraphWriter;
 import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedFactory;
+import org.apache.tinkerpop.gremlin.structure.util.star.StarGraph;
+import org.apache.tinkerpop.gremlin.structure.util.star.StarGraphGryoSerializer;
 import org.apache.tinkerpop.shaded.kryo.Kryo;
 import org.apache.tinkerpop.shaded.kryo.io.Output;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.HashMap;
 import java.util.Iterator;
 
 /**
  * The {@link GraphWriter} for the Gremlin Structure serialization format based on Kryo.  The format is meant to be
  * non-lossy in terms of Gremlin Structure to Gremlin Structure migrations (assuming both structure implementations
  * support the same graph features).
- * <br/>
+ * <p/>
  * This implementation is not thread-safe.  Have one {@code GraphWriter} instance per thread.
  *
  * @author Stephen Mallette (http://stephen.genoprime.com)
@@ -49,111 +51,114 @@ public class GryoWriter implements GraphWriter {
         this.kryo = gryoMapper.createMapper();
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void writeGraph(final OutputStream outputStream, final Graph g) throws IOException {
-        final Output output = new Output(outputStream);
-        writeHeader(output);
-
-        final boolean supportsGraphVariables = g.features().graph().variables().supportsVariables();
-        output.writeBoolean(supportsGraphVariables);
-        if (supportsGraphVariables)
-            kryo.writeObject(output, new HashMap<>(g.variables().asMap()));
-
-        final Iterator<Vertex> vertices = g.vertices();
-        final boolean hasSomeVertices = vertices.hasNext();
-        output.writeBoolean(hasSomeVertices);
-        while (vertices.hasNext()) {
-            final Vertex v = vertices.next();
-            writeVertexToOutput(output, v, Direction.OUT);
-        }
-
-        output.flush();
+        writeVertices(outputStream, g.vertices(), Direction.BOTH);
     }
 
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void writeVertices(final OutputStream outputStream, final Iterator<Vertex> vertexIterator, final Direction direction) throws IOException {
+        kryo.getRegistration(StarGraph.class).setSerializer(StarGraphGryoSerializer.with(direction));
+        final Output output = new Output(outputStream);
+        while (vertexIterator.hasNext()) {
+            writeVertexInternal(output, vertexIterator.next());
+        }
+        output.flush();
+        kryo.getRegistration(StarGraph.class).setSerializer(StarGraphGryoSerializer.with(Direction.BOTH));
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void writeVertices(final OutputStream outputStream, final Iterator<Vertex> vertexIterator) throws IOException {
+        writeVertices(outputStream, vertexIterator, null);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void writeVertex(final OutputStream outputStream, final Vertex v, final Direction direction) throws IOException {
+        kryo.getRegistration(StarGraph.class).setSerializer(StarGraphGryoSerializer.with(direction));
         final Output output = new Output(outputStream);
-        writeHeader(output);
-        writeVertexToOutput(output, v, direction);
+        writeVertexInternal(output, v);
         output.flush();
+        kryo.getRegistration(StarGraph.class).setSerializer(StarGraphGryoSerializer.with(Direction.BOTH));
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void writeVertex(final OutputStream outputStream, final Vertex v) throws IOException {
-        final Output output = new Output(outputStream);
-        writeHeader(output);
-        writeVertexWithNoEdgesToOutput(output, v);
-        output.flush();
+        writeVertex(outputStream, v, null);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void writeEdge(final OutputStream outputStream, final Edge e) throws IOException {
         final Output output = new Output(outputStream);
         writeHeader(output);
-        kryo.writeClassAndObject(output, DetachedFactory.detach(e, true));
+        kryo.writeObject(output, DetachedFactory.detach(e, true));
         output.flush();
     }
 
-    void writeHeader(final Output output) throws IOException {
-        output.writeBytes(GryoMapper.HEADER);
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void writeVertexProperty(final OutputStream outputStream, final VertexProperty vp) throws IOException {
+        final Output output = new Output(outputStream);
+        writeHeader(output);
+        kryo.writeObject(output, DetachedFactory.detach(vp, true));
+        output.flush();
     }
 
-    private void writeEdgeToOutput(final Output output, final Edge e) {
-        this.writeElement(output, e, null);
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void writeProperty(final OutputStream outputStream, final Property p) throws IOException {
+        final Output output = new Output(outputStream);
+        writeHeader(output);
+        kryo.writeObject(output, DetachedFactory.detach(p, true));
+        output.flush();
     }
 
-    private void writeVertexWithNoEdgesToOutput(final Output output, final Vertex v) {
-        writeElement(output, v, null);
-    }
-
-    private void writeVertexToOutput(final Output output, final Vertex v, final Direction direction) {
-        this.writeElement(output, v, direction);
-    }
-
-    private void writeElement(final Output output, final Element e, final Direction direction) {
-        kryo.writeClassAndObject(output, e);
-
-        if (e instanceof Vertex) {
-            output.writeBoolean(direction != null);
-            if (direction != null) {
-                final Vertex v = (Vertex) e;
-                kryo.writeObject(output, direction);
-                if (direction == Direction.BOTH || direction == Direction.OUT)
-                    writeDirectionalEdges(output, Direction.OUT, v.edges(Direction.OUT));
-
-                if (direction == Direction.BOTH || direction == Direction.IN)
-                    writeDirectionalEdges(output, Direction.IN, v.edges(Direction.IN));
-            }
-
-            kryo.writeClassAndObject(output, VertexTerminator.INSTANCE);
-        }
-    }
-
-    private void writeDirectionalEdges(final Output output, final Direction d, final Iterator<Edge> vertexEdges) {
-        final boolean hasEdges = vertexEdges.hasNext();
-        kryo.writeObject(output, d);
-        output.writeBoolean(hasEdges);
-
-        while (vertexEdges.hasNext()) {
-            final Edge edgeToWrite = vertexEdges.next();
-            writeEdgeToOutput(output, edgeToWrite);
-        }
-
-        if (hasEdges)
-            kryo.writeClassAndObject(output, EdgeTerminator.INSTANCE);
-    }
-
+    /**
+     * {@inheritDoc}
+     */
+    @Override
     public void writeObject(final OutputStream outputStream, final Object object) {
         final Output output = new Output(outputStream);
         this.kryo.writeClassAndObject(output, object);
         output.flush();
     }
 
+    void writeVertexInternal(final Output output, final Vertex v) throws IOException {
+        writeHeader(output);
+        kryo.writeObject(output, StarGraph.of(v));
+        kryo.writeClassAndObject(output, VertexTerminator.INSTANCE);
+    }
+
+    void writeHeader(final Output output) throws IOException {
+        output.writeBytes(GryoMapper.HEADER);
+    }
+
     public static Builder build() {
         return new Builder();
     }
 
-    public static class Builder {
+    public static class Builder implements WriterBuilder<GryoWriter> {
         /**
          * Always creates the most current version available.
          */

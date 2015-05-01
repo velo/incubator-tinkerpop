@@ -18,15 +18,17 @@
  */
 package org.apache.tinkerpop.gremlin.structure.io.graphml;
 
-import org.apache.tinkerpop.gremlin.process.traversal.T;
 import org.apache.tinkerpop.gremlin.structure.Direction;
+import org.apache.tinkerpop.gremlin.structure.Property;
+import org.apache.tinkerpop.gremlin.structure.T;
 import org.apache.tinkerpop.gremlin.structure.Edge;
 import org.apache.tinkerpop.gremlin.structure.Graph;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
+import org.apache.tinkerpop.gremlin.structure.VertexProperty;
 import org.apache.tinkerpop.gremlin.structure.io.GraphReader;
-import org.apache.tinkerpop.gremlin.structure.util.batch.BatchGraph;
-import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedEdge;
-import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedVertex;
+import org.apache.tinkerpop.gremlin.structure.io.Io;
+import org.apache.tinkerpop.gremlin.structure.util.Attachable;
+import org.apache.tinkerpop.gremlin.structure.util.ElementHelper;
 
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
@@ -38,6 +40,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -55,56 +58,24 @@ import java.util.stream.Stream;
 public class GraphMLReader implements GraphReader {
     private final XMLInputFactory inputFactory = XMLInputFactory.newInstance();
 
-    private final String vertexIdKey;
-    private final String edgeIdKey;
     private final String edgeLabelKey;
     private final String vertexLabelKey;
     private final long batchSize;
 
-    private GraphMLReader(final String vertexIdKey, final String edgeIdKey,
-                          final String edgeLabelKey, final String vertexLabelKey,
+    private GraphMLReader(final String edgeLabelKey, final String vertexLabelKey,
                           final long batchSize) {
-        this.vertexIdKey = vertexIdKey;
-        this.edgeIdKey = edgeIdKey;
         this.edgeLabelKey = edgeLabelKey;
         this.batchSize = batchSize;
         this.vertexLabelKey = vertexLabelKey;
     }
 
     @Override
-    public Iterator<Vertex> readVertices(final InputStream inputStream, final Direction direction,
-                                         final Function<DetachedVertex, Vertex> vertexMaker,
-                                         final Function<DetachedEdge, Edge> edgeMaker) throws IOException {
-        throw new UnsupportedOperationException("GraphML does not allow for a partial structure");
-    }
-
-    @Override
-    public Edge readEdge(final InputStream inputStream, final Function<DetachedEdge, Edge> edgeMaker) throws IOException {
-        throw new UnsupportedOperationException("GraphML does not allow for a partial structure");
-    }
-
-    @Override
-    public Vertex readVertex(final InputStream inputStream, final Function<DetachedVertex, Vertex> vertexMaker) throws IOException {
-        throw new UnsupportedOperationException("GraphML does not allow for a partial structure");
-    }
-
-    @Override
-    public Vertex readVertex(final InputStream inputStream, final Direction direction, final Function<DetachedVertex, Vertex> vertexMaker,
-                             final Function<DetachedEdge, Edge> edgeMaker) throws IOException {
-        throw new UnsupportedOperationException("GraphML does not allow for a partial structure");
-    }
-
-    @Override
     public void readGraph(final InputStream graphInputStream, final Graph graphToWriteTo) throws IOException {
-        final BatchGraph graph;
-        try {
-            // will throw an exception if not constructed properly
-            graph = BatchGraph.build(graphToWriteTo)
-                    .vertexIdKey(vertexIdKey)
-                    .bufferSize(batchSize).create();
-        } catch (Exception ex) {
-            throw new IOException("Could not instantiate BatchGraph wrapper", ex);
-        }
+        final Map<Object,Vertex> cache = new HashMap<>();
+        final AtomicLong counter = new AtomicLong(0);
+        final boolean supportsTx = graphToWriteTo.features().graph().supportsTransactions();
+        final boolean supportsEdgeIds = graphToWriteTo.features().edge().supportsUserSuppliedIds();
+        final boolean supportsVertexIds = graphToWriteTo.features().vertex().supportsUserSuppliedIds();
 
         try {
             final XMLStreamReader reader = inputFactory.createXMLStreamReader(graphInputStream);
@@ -152,10 +123,11 @@ public class GraphMLReader implements GraphReader {
                             // graphml allows edges and vertices to be mixed in terms of how they are positioned
                             // in the xml therefore it is possible that an edge is created prior to its definition
                             // as a vertex.
-                            Iterator<Vertex> iterator = graph.vertices(vertexIdOut);
-                            edgeOutVertex = iterator.hasNext() ? iterator.next() : graph.addVertex(T.id, vertexIdOut);
-                            iterator = graph.vertices(vertexIdIn);
-                            edgeInVertex = iterator.hasNext() ? iterator.next() : graph.addVertex(T.id, vertexIdIn);
+                            edgeOutVertex = findOrCreate(vertexIdOut, graphToWriteTo, supportsVertexIds, cache);
+                            edgeInVertex = findOrCreate(vertexIdIn, graphToWriteTo, supportsVertexIds, cache);
+
+                            if (supportsTx && counter.incrementAndGet() % batchSize == 0)
+                                graphToWriteTo.tx().commit();
 
                             isInEdge = true;
                             edgeProps = new HashMap<>();
@@ -176,8 +148,6 @@ public class GraphMLReader implements GraphReader {
                                 } else if (isInEdge) {
                                     if (key.equals(edgeLabelKey))
                                         edgeLabel = value;
-                                    else if (key.equals(edgeIdKey))
-                                        edgeId = value;
                                     else
                                         edgeProps.put(dataAttributeName, typeCastValue(key, value, keyTypesMaps));
                                 }
@@ -193,10 +163,10 @@ public class GraphMLReader implements GraphReader {
                         final String currentVertexLabel = Optional.ofNullable(vertexLabel).orElse(Vertex.DEFAULT_LABEL);
                         final Object[] propsAsArray = vertexProps.entrySet().stream().flatMap(e -> Stream.of(e.getKey(), e.getValue())).toArray();
 
-                        // if incremental loading is on in batchgraph it handles graphml spec where it states that
-                        // order of edges/vertices may be mixed such that an edge may be created before an vertex.
-                        graph.addVertex(Stream.concat(Stream.of(T.id, currentVertexId, T.label, currentVertexLabel),
-                                Stream.of(propsAsArray)).toArray());
+                        findOrCreate(currentVertexId, graphToWriteTo, supportsVertexIds, cache, ElementHelper.upsert(propsAsArray, T.label, currentVertexLabel));
+
+                        if (supportsTx && counter.incrementAndGet() % batchSize == 0)
+                            graphToWriteTo.tx().commit();
 
                         vertexId = null;
                         vertexLabel = null;
@@ -204,8 +174,11 @@ public class GraphMLReader implements GraphReader {
                         isInVertex = false;
                     } else if (elementName.equals(GraphMLTokens.EDGE)) {
                         final Object[] propsAsArray = edgeProps.entrySet().stream().flatMap(e -> Stream.of(e.getKey(), e.getValue())).toArray();
-                        edgeOutVertex.addEdge(edgeLabel, edgeInVertex, Stream.concat(Stream.of(T.id, edgeId),
-                                Stream.of(propsAsArray)).toArray());
+                        final Object[] propsReady = supportsEdgeIds ? ElementHelper.upsert(propsAsArray, T.id, edgeId) : propsAsArray;
+                        edgeOutVertex.addEdge(edgeLabel, edgeInVertex, propsReady);
+
+                        if (supportsTx && counter.incrementAndGet() % batchSize == 0)
+                            graphToWriteTo.tx().commit();
 
                         edgeId = null;
                         edgeLabel = null;
@@ -218,11 +191,101 @@ public class GraphMLReader implements GraphReader {
                 }
             }
 
-            graph.tx().commit();
+            if (supportsTx) graphToWriteTo.tx().commit();
         } catch (XMLStreamException xse) {
             // rollback whatever portion failed
-            graph.tx().rollback();
+            if (supportsTx && counter.incrementAndGet() % batchSize == 0)
+                graphToWriteTo.tx().rollback();
             throw new IOException(xse);
+        }
+    }
+
+    /**
+     * This method is not supported for this reader.
+     *
+     * @throws UnsupportedOperationException when called.
+     */
+    @Override
+    public Iterator<Vertex> readVertices(final InputStream inputStream,
+                                         final Function<Attachable<Vertex>, Vertex> vertexAttachMethod,
+                                         final Function<Attachable<Edge>, Edge> edgeAttachMethod,
+                                         final Direction attachEdgesOfThisDirection) throws IOException {
+        throw Io.Exceptions.readerFormatIsForFullGraphSerializationOnly(this.getClass());
+    }
+
+    /**
+     * This method is not supported for this reader.
+     *
+     * @throws UnsupportedOperationException when called.
+     */
+    @Override
+    public Vertex readVertex(final InputStream inputStream, final Function<Attachable<Vertex>, Vertex> vertexAttachMethod) throws IOException {
+        throw Io.Exceptions.readerFormatIsForFullGraphSerializationOnly(this.getClass());
+    }
+
+    /**
+     * This method is not supported for this reader.
+     *
+     * @throws UnsupportedOperationException when called.
+     */
+    @Override
+    public Vertex readVertex(final InputStream inputStream, final Function<Attachable<Vertex>, Vertex> vertexAttachMethod,
+                             final Function<Attachable<Edge>, Edge> edgeAttachMethod,
+                             final Direction attachEdgesOfThisDirection) throws IOException {
+        throw Io.Exceptions.readerFormatIsForFullGraphSerializationOnly(this.getClass());
+    }
+
+    /**
+     * This method is not supported for this reader.
+     *
+     * @throws UnsupportedOperationException when called.
+     */
+    @Override
+    public Edge readEdge(final InputStream inputStream, final Function<Attachable<Edge>, Edge> edgeAttachMethod) throws IOException {
+        throw Io.Exceptions.readerFormatIsForFullGraphSerializationOnly(this.getClass());
+    }
+
+    /**
+     * This method is not supported for this reader.
+     *
+     * @throws UnsupportedOperationException when called.
+     */
+    @Override
+    public VertexProperty readVertexProperty(final InputStream inputStream,
+                                             final Function<Attachable<VertexProperty>, VertexProperty> vertexPropertyAttachMethod) throws IOException {
+        throw Io.Exceptions.readerFormatIsForFullGraphSerializationOnly(this.getClass());
+    }
+
+    /**
+     * This method is not supported for this reader.
+     *
+     * @throws UnsupportedOperationException when called.
+     */
+    @Override
+    public Property readProperty(final InputStream inputStream,
+                                 final Function<Attachable<Property>, Property> propertyAttachMethod) throws IOException {
+        throw Io.Exceptions.readerFormatIsForFullGraphSerializationOnly(this.getClass());
+    }
+
+    /**
+     * This method is not supported for this reader.
+     *
+     * @throws UnsupportedOperationException when called.
+     */
+    @Override
+    public <C> C readObject(final InputStream inputStream, final Class<? extends C> clazz) throws IOException {
+        throw Io.Exceptions.readerFormatIsForFullGraphSerializationOnly(this.getClass());
+    }
+
+    private static Vertex findOrCreate(final Object id, final Graph graphToWriteTo, final boolean supportsIds,
+                                       final Map<Object,Vertex> cache, final Object... args) {
+        if (cache.containsKey(id)) {
+            return cache.get(id);
+        } else {
+            final Object [] argsReady = supportsIds ? ElementHelper.upsert(args, T.id, id) : args;
+            final Vertex v = graphToWriteTo.addVertex(argsReady);
+            cache.put(id, v);
+            return v;
         }
     }
 
@@ -251,34 +314,12 @@ public class GraphMLReader implements GraphReader {
     /**
      * Allows configuration and construction of the GraphMLReader instance.
      */
-    public static final class Builder {
-        private String vertexIdKey = T.id.getAccessor();
-        private String edgeIdKey = T.id.getAccessor();
+    public static final class Builder implements ReaderBuilder<GraphMLReader> {
         private String edgeLabelKey = GraphMLTokens.LABEL_E;
         private String vertexLabelKey = GraphMLTokens.LABEL_V;
-        private long batchSize = BatchGraph.DEFAULT_BUFFER_SIZE;
+        private long batchSize = 10000;
 
         private Builder() {
-        }
-
-        /**
-         * The name of the key to supply to
-         * {@link org.apache.tinkerpop.gremlin.structure.util.batch.BatchGraph.Builder#vertexIdKey} when reading data into
-         * the {@link Graph}.
-         */
-        public Builder vertexIdKey(final String vertexIdKey) {
-            this.vertexIdKey = vertexIdKey;
-            return this;
-        }
-
-        /**
-         * The name of the key to supply to
-         * {@link org.apache.tinkerpop.gremlin.structure.util.batch.BatchGraph.Builder#edgeIdKey} when reading data into
-         * the {@link Graph}.
-         */
-        public Builder edgeIdKey(final String edgeIdKey) {
-            this.edgeIdKey = edgeIdKey;
-            return this;
         }
 
         /**
@@ -306,7 +347,7 @@ public class GraphMLReader implements GraphReader {
         }
 
         public GraphMLReader create() {
-            return new GraphMLReader(vertexIdKey, edgeIdKey, edgeLabelKey, vertexLabelKey, batchSize);
+            return new GraphMLReader(edgeLabelKey, vertexLabelKey, batchSize);
         }
     }
 }

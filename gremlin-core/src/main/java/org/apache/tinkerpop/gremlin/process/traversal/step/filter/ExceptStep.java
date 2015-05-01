@@ -67,7 +67,7 @@ public final class ExceptStep<S> extends FilterStep<S> {
     protected boolean filter(final Traverser.Admin<S> traverser) {
         switch (this.choice) {
             case 0: {
-                final Object except = traverser.asAdmin().getSideEffects().exists(this.sideEffectKeyOrPathLabel) ?
+                final Object except = traverser.asAdmin().getSideEffects().get(this.sideEffectKeyOrPathLabel).isPresent() ?
                         traverser.sideEffects(this.sideEffectKeyOrPathLabel) :
                         traverser.path(this.sideEffectKeyOrPathLabel);
                 return except instanceof Collection ?
@@ -92,6 +92,6 @@ public final class ExceptStep<S> extends FilterStep<S> {
                 Collections.singleton(TraverserRequirement.OBJECT) :
                 Stream.of(TraverserRequirement.OBJECT,
                         TraverserRequirement.SIDE_EFFECTS,
-                        TraverserRequirement.PATH_ACCESS).collect(Collectors.toSet());
+                        TraverserRequirement.PATH).collect(Collectors.toSet());
     }
 }

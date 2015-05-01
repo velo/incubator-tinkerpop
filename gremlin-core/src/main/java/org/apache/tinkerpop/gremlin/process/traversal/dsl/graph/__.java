@@ -20,13 +20,14 @@ package org.apache.tinkerpop.gremlin.process.traversal.dsl.graph;
 
 import org.apache.tinkerpop.gremlin.process.traversal.Path;
 import org.apache.tinkerpop.gremlin.process.traversal.Scope;
-import org.apache.tinkerpop.gremlin.process.traversal.T;
 import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
 import org.apache.tinkerpop.gremlin.process.traversal.Traverser;
 import org.apache.tinkerpop.gremlin.process.traversal.step.util.Tree;
 import org.apache.tinkerpop.gremlin.structure.Direction;
 import org.apache.tinkerpop.gremlin.structure.Edge;
+import org.apache.tinkerpop.gremlin.structure.P;
 import org.apache.tinkerpop.gremlin.structure.Property;
+import org.apache.tinkerpop.gremlin.structure.T;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.apache.tinkerpop.gremlin.structure.VertexProperty;
 import org.apache.tinkerpop.gremlin.structure.util.empty.EmptyGraph;
@@ -36,13 +37,10 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
-import java.util.function.BiPredicate;
 import java.util.function.BinaryOperator;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
-import java.util.function.UnaryOperator;
 
 /**
  * @author Marko A. Rodriguez (http://markorodriguez.com)
@@ -319,32 +317,32 @@ public class __ {
         return __.<A>start().hasNot(hasNotNextTraversal);
     }
 
-    public static <A> GraphTraversal<A, A> has(final String key) {
-        return __.<A>start().has(key);
+    public static <A> GraphTraversal<A, A> has(final String key, final P<?> predicate) {
+        return __.<A>start().has(key, predicate);
     }
 
     public static <A> GraphTraversal<A, A> has(final String key, final Object value) {
         return __.<A>start().has(key, value);
     }
 
+    public static <A> GraphTraversal<A, A> has(final T accessor, final P<?> predicate) {
+        return __.<A>start().has(accessor, predicate);
+    }
+
     public static <A> GraphTraversal<A, A> has(final T accessor, final Object value) {
         return __.<A>start().has(accessor, value);
-    }
-
-    public static <A> GraphTraversal<A, A> has(final String key, final BiPredicate predicate, final Object value) {
-        return __.<A>start().has(key, predicate, value);
-    }
-
-    public static <A> GraphTraversal<A, A> has(final T accessor, final BiPredicate predicate, final Object value) {
-        return __.<A>start().has(accessor, predicate, value);
     }
 
     public static <A> GraphTraversal<A, A> has(final String label, final String key, final Object value) {
         return __.<A>start().has(label, key, value);
     }
 
-    public static <A> GraphTraversal<A, A> has(final String label, final String key, final BiPredicate predicate, final Object value) {
-        return __.<A>start().has(label, key, predicate, value);
+    public static <A> GraphTraversal<A, A> has(final String label, final String key, final P<?> predicate) {
+        return __.<A>start().has(label, key, predicate);
+    }
+
+    public static <A> GraphTraversal<A, A> has(final String key) {
+        return __.<A>start().has(key);
     }
 
     public static <A> GraphTraversal<A, A> hasNot(final String key) {
@@ -367,24 +365,20 @@ public class __ {
         return __.<A>start().hasValue(values);
     }
 
-    public static <A, E2> GraphTraversal<A, Map<String, E2>> where(final String firstKey, final String secondKey, final BiPredicate predicate) {
-        return __.<A>start().where(firstKey, secondKey, predicate);
-    }
-
-    public static <A, E2> GraphTraversal<A, Map<String, E2>> where(final String firstKey, final BiPredicate predicate, final String secondKey) {
-        return __.<A>start().where(firstKey, predicate, secondKey);
+    public static <A, E2> GraphTraversal<A, Map<String, E2>> where(final String firstKey, final P<?> secondKeyPredicate) {
+        return __.<A>start().where(firstKey, secondKeyPredicate);
     }
 
     public static <A, E2> GraphTraversal<A, Map<String, E2>> where(final Traversal constraint) {
         return __.<A>start().where(constraint);
     }
 
-    public static <A> GraphTraversal<A, A> is(final Object value) {
-        return __.<A>start().is(value);
+    public static <A> GraphTraversal<A, A> is(final P<A>... predicates) {
+        return __.<A>start().is(predicates);
     }
 
-    public static <A> GraphTraversal<A, A> is(final BiPredicate predicate, final Object value) {
-        return __.<A>start().is(predicate, value);
+    public static <A> GraphTraversal<A, A> is(final Object value) {
+        return __.<A>start().is(value);
     }
 
     public static <A> GraphTraversal<A, A> coin(final double probability) {
@@ -567,30 +561,6 @@ public class __ {
 
     public static <A> GraphTraversal<A, A> profile() {
         return __.<A>start().profile();
-    }
-
-    public static <A> GraphTraversal<A, A> withSideEffect(final String key, final Supplier supplier) {
-        return __.<A>start().withSideEffect(key, supplier);
-    }
-
-    public static <A, B> GraphTraversal<A, A> withSack(final Supplier<B> initialValue, final UnaryOperator<B> splitOperator) {
-        return __.<A>start().withSack(initialValue, splitOperator);
-    }
-
-    public static <A, B> GraphTraversal<A, A> withSack(final Supplier<B> initialValue) {
-        return __.<A>start().withSack(initialValue);
-    }
-
-    public static <A, B> GraphTraversal<A, A> withSack(final B initialValue, final UnaryOperator<B> splitOperator) {
-        return __.<A>start().withSack(initialValue, splitOperator);
-    }
-
-    public static <A, B> GraphTraversal<A, A> withSack(B initialValue) {
-        return __.<A>start().withSack(initialValue);
-    }
-
-    public static <A> GraphTraversal<A, A> withPath() {
-        return __.<A>start().withPath();
     }
 
     public static <A> GraphTraversal<A, A> barrier() {

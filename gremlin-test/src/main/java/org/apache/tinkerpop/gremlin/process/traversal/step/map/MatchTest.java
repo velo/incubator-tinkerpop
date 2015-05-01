@@ -20,7 +20,7 @@ package org.apache.tinkerpop.gremlin.process.traversal.step.map;
 
 import org.apache.tinkerpop.gremlin.LoadGraphWith;
 import org.apache.tinkerpop.gremlin.process.AbstractGremlinProcessTest;
-import org.apache.tinkerpop.gremlin.process.traversal.T;
+import org.apache.tinkerpop.gremlin.structure.T;
 import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
 import org.apache.tinkerpop.gremlin.process.traversal.TraversalEngine;
 import org.apache.tinkerpop.gremlin.process.traversal.Traverser;
@@ -32,9 +32,9 @@ import org.apache.tinkerpop.gremlin.process.traversal.step.map.match.Enumerator;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.match.InnerJoinEnumerator;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.match.IteratorEnumerator;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.match.MatchStep;
-import org.apache.tinkerpop.gremlin.process.traversal.traverser.B_O_PA_S_SE_SL_Traverser;
+import org.apache.tinkerpop.gremlin.process.traversal.traverser.B_O_S_SE_SL_Traverser;
 import org.apache.tinkerpop.gremlin.process.traversal.step.util.MapHelper;
-import org.apache.tinkerpop.gremlin.structure.Compare;
+import static org.apache.tinkerpop.gremlin.structure.P.*;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.junit.Test;
 
@@ -295,7 +295,7 @@ public abstract class MatchTest extends AbstractGremlinProcessTest {
     @Test
     @LoadGraphWith(GRATEFUL)
     public void g_V_matchXa_hasXname_GarciaX__a_0writtenBy_b__a_0sungBy_bX() throws Exception {
-        Traversal<Vertex, Map<String, Vertex>> traversal = get_g_V_matchXa_hasXname_GarciaX__a_0writtenBy_b__a_0sungBy_bX();
+        final Traversal<Vertex, Map<String, Vertex>> traversal = get_g_V_matchXa_hasXname_GarciaX__a_0writtenBy_b__a_0sungBy_bX();
         printTraversalForm(traversal);
         assertResults(vertexToStr, traversal,
                 new Bindings<Vertex>().put("a", convertToVertex(graph, "Garcia")).put("b", convertToVertex(graph, "CREAM PUFF WAR")),
@@ -305,7 +305,7 @@ public abstract class MatchTest extends AbstractGremlinProcessTest {
     @Test
     @LoadGraphWith(GRATEFUL)
     public void g_V_matchXa_0sungBy_b__a_0sungBy_c__b_writtenBy_d__c_writtenBy_e__d_hasXname_George_HarisonX__e_hasXname_Bob_MarleyXX() throws Exception {
-        Traversal<Vertex, Map<String, Vertex>> traversal = get_g_V_matchXa_0sungBy_b__a_0sungBy_c__b_writtenBy_d__c_writtenBy_e__d_hasXname_George_HarisonX__e_hasXname_Bob_MarleyXX();
+        final Traversal<Vertex, Map<String, Vertex>> traversal = get_g_V_matchXa_0sungBy_b__a_0sungBy_c__b_writtenBy_d__c_writtenBy_e__d_hasXname_George_HarisonX__e_hasXname_Bob_MarleyXX();
         printTraversalForm(traversal);
         assertResults(vertexToStr, traversal,
                 new Bindings<Vertex>()
@@ -319,7 +319,7 @@ public abstract class MatchTest extends AbstractGremlinProcessTest {
     @Test
     @LoadGraphWith(MODERN)
     public void g_V_matchXa_created_b__b_0created_cX_whereXa_neq_cX_selectXa_c_nameX() throws Exception {
-        Traversal<Vertex, Map<String, String>> traversal = get_g_V_matchXa_created_b__b_0created_cX_whereXa_neq_cX_selectXa_c_nameX();
+        final Traversal<Vertex, Map<String, String>> traversal = get_g_V_matchXa_created_b__b_0created_cX_whereXa_neq_cX_selectXa_c_nameX();
         assertResults(Function.identity(), traversal,
                 new Bindings<String>().put("a", "marko").put("c", "josh"),
                 new Bindings<String>().put("a", "marko").put("c", "peter"),
@@ -780,7 +780,7 @@ public abstract class MatchTest extends AbstractGremlinProcessTest {
             return g.V().match("a",
                     as("a").out("created").as("b"),
                     as("b").in("created").as("c"))
-                    .where("a", Compare.neq, "c")
+                    .where("a", neq("c"))
                     .<String>select("a", "c").by("name");
         }
 
@@ -886,7 +886,7 @@ public abstract class MatchTest extends AbstractGremlinProcessTest {
     private void assertBranchFactor(final double branchFactor,
                                     final Traversal t,
                                     final Iterator inputs) {
-        Traverser start = new B_O_PA_S_SE_SL_Traverser(null, null);
+        Traverser start = new B_O_S_SE_SL_Traverser(null, null, 1l);  // TODO bad? P?
         MatchStep.TraversalWrapper w = new MatchStep.TraversalWrapper(t, "a", "b");
         MatchStep.TraversalUpdater updater = new MatchStep.TraversalUpdater<>(w, inputs, start, "x");
         while (updater.hasNext()) {

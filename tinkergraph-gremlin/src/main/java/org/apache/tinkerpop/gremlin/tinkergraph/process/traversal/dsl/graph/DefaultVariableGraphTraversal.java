@@ -29,6 +29,7 @@ import org.apache.tinkerpop.gremlin.process.traversal.step.map.RangeLocalStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.util.HasContainer;
 import org.apache.tinkerpop.gremlin.process.traversal.util.DefaultTraversal;
 import org.apache.tinkerpop.gremlin.structure.Graph;
+import org.apache.tinkerpop.gremlin.structure.P;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -92,15 +93,12 @@ public class DefaultVariableGraphTraversal<S, E> extends DefaultTraversal<S, E> 
     }
 
     @Override
-    public VariableGraphTraversal<S, E> is(final BiPredicate predicate, final Object value) {
+    public VariableGraphTraversal<S, E> is(final Object value) {
         final List<TraversalVariablePosition> variablePositions = new ArrayList<>();
-        if ((predicate instanceof TraversalVariable))
-            variablePositions.add(new TraversalVariablePosition((TraversalVariable) predicate, 0));
-
         if ((value instanceof TraversalVariable))
             variablePositions.add(new TraversalVariablePosition((TraversalVariable) value, 1));
 
-        final Step s = new IsStep(this.asAdmin(), predicate, value);
+        final Step s = new IsStep(this.asAdmin(), P.eq(value));
         stepVariables.put(s, variablePositions);
         return this.asAdmin().addStep(s);
     }

@@ -21,11 +21,10 @@ package org.apache.tinkerpop.gremlin.structure.io.gryo;
 import org.apache.tinkerpop.gremlin.process.computer.MapReduce;
 import org.apache.tinkerpop.gremlin.process.computer.util.MapMemory;
 import org.apache.tinkerpop.gremlin.process.traversal.Path;
-import org.apache.tinkerpop.gremlin.process.traversal.T;
 import org.apache.tinkerpop.gremlin.process.traversal.step.util.BulkSet;
 import org.apache.tinkerpop.gremlin.process.traversal.step.util.Tree;
-import org.apache.tinkerpop.gremlin.process.traversal.traverser.B_O_PA_S_SE_SL_Traverser;
-import org.apache.tinkerpop.gremlin.process.traversal.traverser.B_O_P_PA_S_SE_SL_Traverser;
+import org.apache.tinkerpop.gremlin.process.traversal.traverser.B_O_P_S_SE_SL_Traverser;
+import org.apache.tinkerpop.gremlin.process.traversal.traverser.B_O_S_SE_SL_Traverser;
 import org.apache.tinkerpop.gremlin.process.traversal.traverser.B_O_Traverser;
 import org.apache.tinkerpop.gremlin.process.traversal.traverser.O_Traverser;
 import org.apache.tinkerpop.gremlin.process.traversal.traverser.util.TraverserSet;
@@ -35,9 +34,12 @@ import org.apache.tinkerpop.gremlin.process.traversal.util.StandardTraversalMetr
 import org.apache.tinkerpop.gremlin.structure.Contains;
 import org.apache.tinkerpop.gremlin.structure.Direction;
 import org.apache.tinkerpop.gremlin.structure.Edge;
+import org.apache.tinkerpop.gremlin.structure.Graph;
 import org.apache.tinkerpop.gremlin.structure.Property;
+import org.apache.tinkerpop.gremlin.structure.T;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.apache.tinkerpop.gremlin.structure.VertexProperty;
+import org.apache.tinkerpop.gremlin.structure.io.IoRegistry;
 import org.apache.tinkerpop.gremlin.structure.io.Mapper;
 import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedEdge;
 import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedPath;
@@ -49,11 +51,14 @@ import org.apache.tinkerpop.gremlin.structure.util.reference.ReferencePath;
 import org.apache.tinkerpop.gremlin.structure.util.reference.ReferenceProperty;
 import org.apache.tinkerpop.gremlin.structure.util.reference.ReferenceVertex;
 import org.apache.tinkerpop.gremlin.structure.util.reference.ReferenceVertexProperty;
+import org.apache.tinkerpop.gremlin.structure.util.star.StarGraph;
+import org.apache.tinkerpop.gremlin.structure.util.star.StarGraphGryoSerializer;
 import org.apache.tinkerpop.shaded.kryo.Kryo;
 import org.apache.tinkerpop.shaded.kryo.KryoSerializable;
 import org.apache.tinkerpop.shaded.kryo.Serializer;
 import org.apache.tinkerpop.shaded.kryo.util.DefaultStreamFactory;
 import org.apache.tinkerpop.shaded.kryo.util.MapReferenceResolver;
+import org.javatuples.Pair;
 import org.javatuples.Triplet;
 
 import java.math.BigDecimal;
@@ -84,7 +89,28 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * A {@link Mapper} implementation for Kryo.
+ * A {@link Mapper} implementation for Kryo. This implementation requires that all classes to be serialized by
+ * Kryo are registered to it.
+ * <p/>
+ * {@link Graph} implementations providing an {@link IoRegistry} should register their custom classes and/or
+ * serializers in one of three ways:
+ * <p/>
+ * <ol>
+ *     <li>Register just the custom class with a {@code null} {@link Serializer} implementation</li>
+ *     <li>Register the custom class with a {@link Serializer} implementation</li>
+ *     <li>
+ *         Register the custom class with a {@code Function<Kryo, Serializer>} for those cases where the
+ *         {@link Serializer} requires the {@link Kryo} instance to get constructed.
+ *     </li>
+ * </ol>
+ * <p/>
+ * For example:
+ * <pre>
+ * {@code
+ * IoRegistry registry = new IoRegistry();
+ * registry.register(GryoIo.class, MyCustomClass.class, new MyCustomClassSerializer());
+ * }
+ * </pre>
  *
  * @author Stephen Mallette (http://stephen.genoprime.com)
  */
@@ -123,7 +149,7 @@ public final class GryoMapper implements Mapper<Kryo> {
     /**
      * A builder to construct a {@link GryoMapper} instance.
      */
-    public static class Builder {
+    public static class Builder implements Mapper.Builder<Builder> {
 
         /**
          * Map with one entry that is used so that it is possible to get the class of LinkedHashMap.Entry.
@@ -169,7 +195,7 @@ public final class GryoMapper implements Mapper<Kryo> {
             add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(DetachedProperty.class, null, 18));
             add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(DetachedVertex.class, null, 19));
             add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(DetachedPath.class, null, 60));
-            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(EdgeTerminator.class, null, 14));
+            // skip 14
             add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(EnumSet.class, null, 46));
             add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(HashMap.class, null, 11));
             add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(HashMap.Entry.class, null, 16));
@@ -192,19 +218,20 @@ public final class GryoMapper implements Mapper<Kryo> {
             add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(ReferenceVertexProperty.class, null, 82));
             add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(ReferenceProperty.class, null, 83));
             add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(ReferenceVertex.class, null, 84));
-            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(ReferencePath.class, null, 85));  // ***LAST ID**
+            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(ReferencePath.class, null, 85));
 
-            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(Edge.class, kryo -> new GraphSerializer.EdgeSerializer(), 65));
-            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(Vertex.class, kryo -> new GraphSerializer.VertexSerializer(), 66));
-            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(Property.class, kryo -> new GraphSerializer.PropertySerializer(), 67));
-            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(VertexProperty.class, kryo -> new GraphSerializer.VertexPropertySerializer(), 68));
-            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(Path.class, kryo -> new GraphSerializer.PathSerializer(), 59));
-            // HACK!
-            //add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(Traverser.Admin.class, gryo -> new GraphSerializer.TraverserSerializer(), 55));
+            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(StarGraph.class, kryo -> StarGraphGryoSerializer.with(Direction.BOTH), 86)); // ***LAST ID**
+
+            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(Edge.class, kryo -> new GryoSerializers.EdgeSerializer(), 65));
+            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(Vertex.class, kryo -> new GryoSerializers.VertexSerializer(), 66));
+            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(Property.class, kryo -> new GryoSerializers.PropertySerializer(), 67));
+            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(VertexProperty.class, kryo -> new GryoSerializers.VertexPropertySerializer(), 68));
+            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(Path.class, kryo -> new GryoSerializers.PathSerializer(), 59));
+            // skip 55
             add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(B_O_Traverser.class, null, 75));
             add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(O_Traverser.class, null, 76));
-            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(B_O_P_PA_S_SE_SL_Traverser.class, null, 77));
-            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(B_O_PA_S_SE_SL_Traverser.class, null, 78));
+            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(B_O_P_S_SE_SL_Traverser.class, null, 77));
+            add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(B_O_S_SE_SL_Traverser.class, null, 78));
 
             add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(TraverserSet.class, null, 58));
             add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(Tree.class, null, 61));
@@ -218,12 +245,24 @@ public final class GryoMapper implements Mapper<Kryo> {
             add(Triplet.<Class, Function<Kryo, Serializer>, Integer>with(DependantMutableMetrics.class, null, 80));
         }};
 
+        private IoRegistry registry = null;
+
         /**
          * Starts numbering classes for Gryo serialization at 65536 to leave room for future usage by TinkerPop.
          */
         private final AtomicInteger currentSerializationId = new AtomicInteger(65536);
 
-        private Builder() {}
+        private Builder() {
+        }
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public Builder addRegistry(final IoRegistry registry) {
+            this.registry = registry;
+            return this;
+        }
 
         /**
          * Register custom classes to serializes with gryo using default serialization.
@@ -252,7 +291,29 @@ public final class GryoMapper implements Mapper<Kryo> {
             return this;
         }
 
+        /**
+         * Creates a {@code GryoMapper}.
+         */
         public GryoMapper create() {
+            // consult the registry if provided and inject registry entries as custom classes.
+            if (registry != null) {
+                final List<Pair<Class, Object>> serializers = registry.find(GryoIo.class);
+                serializers.forEach(p -> {
+                    if (null == p.getValue1())
+                        addCustom(p.getValue0());
+                    else if (p.getValue1() instanceof Serializer)
+                        addCustom(p.getValue0(), (Serializer) p.getValue1());
+                    else if (p.getValue1() instanceof Function)
+                        addCustom(p.getValue0(), (Function<Kryo, Serializer>) p.getValue1());
+                    else
+                        throw new IllegalStateException(String.format(
+                                "Unexpected value provided by the %s for %s - expects [null, %s implementation or Function<%s, %s>]",
+                                IoRegistry.class.getSimpleName(), p.getValue0().getClass().getSimpleName(),
+                                Serializer.class.getName(), Kryo.class.getSimpleName(),
+                                Serializer.class.getSimpleName()));
+                });
+            }
+
             return new GryoMapper(serializationList);
         }
     }

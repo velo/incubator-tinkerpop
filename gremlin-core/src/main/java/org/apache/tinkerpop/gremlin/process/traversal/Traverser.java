@@ -18,17 +18,16 @@
  */
 package org.apache.tinkerpop.gremlin.process.traversal;
 
-import org.apache.tinkerpop.gremlin.structure.Graph;
-import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.apache.tinkerpop.gremlin.structure.util.Attachable;
 
 import java.io.Serializable;
+import java.util.function.Function;
 
 /**
  * A {@code Traverser} represents the current state of an object flowing through a {@link Traversal}.
  * A traverser maintains a reference to the current object, a traverser-local "sack", a traversal-global sideEffect,
  * a bulk count, and a path history.
- * <br/>
+ * <p/>
  * Different types of traverser can exist depending on the semantics of the traversal and the desire for
  * space/time optimizations of the developer.
  *
@@ -99,7 +98,7 @@ public interface Traverser<T> extends Serializable, Comparable<Traverser<T>>, Cl
      * @return the object in the sideEffects of the respective key
      */
     public default <A> A sideEffects(final String sideEffectKey) {
-        return this.asAdmin().getSideEffects().get(sideEffectKey);
+        return this.asAdmin().getSideEffects().<A>get(sideEffectKey).get();
     }
 
     /**
@@ -145,7 +144,7 @@ public interface Traverser<T> extends Serializable, Comparable<Traverser<T>>, Cl
      * The methods in System.Traverser are useful to underlying Step and Traversal implementations.
      * They should not be accessed by the user during lambda-based manipulations.
      */
-    public interface Admin<T> extends Traverser<T>, Attachable<Admin<T>> {
+    public interface Admin<T> extends Traverser<T>, Attachable<T> {
 
         public static final String HALT = "halt";
 
@@ -246,23 +245,11 @@ public interface Traverser<T> extends Serializable, Comparable<Traverser<T>>, Cl
         /**
          * Regenerate the detached traverser given its location at a particular vertex.
          *
-         * @param hostVertex The vertex that is hosting the traverser
+         * @param method The method by which to attach a {@code Traverser} to an vertex.
          * @return The inflated traverser
          */
         @Override
-        public Admin<T> attach(final Vertex hostVertex);
-
-        /**
-         * Traversers can not attach to graphs and thus, an {@link UnsupportedOperationException} is thrown.
-         *
-         * @param graph the graph to attach the traverser to, which it can't.
-         * @return nothing as an exception is thrown
-         * @throws UnsupportedOperationException is always thrown as it makes no sense to attach a traverser to a graph
-         */
-        @Override
-        public default Admin<T> attach(final Graph graph) throws UnsupportedOperationException {
-            throw new UnsupportedOperationException("A traverser can only exist at the vertices of the graph, not the graph itself");
-        }
+        public T attach(final Function<Attachable<T>, T> method);
 
         /**
          * Set the sideEffects of the {@link Traversal}. Given that traversers can move between machines,

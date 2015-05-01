@@ -25,6 +25,7 @@ import org.apache.tinkerpop.gremlin.AbstractGremlinTest;
 import org.apache.tinkerpop.gremlin.FeatureRequirementSet;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.apache.tinkerpop.gremlin.structure.VertexProperty;
+import org.apache.tinkerpop.gremlin.structure.util.Attachable;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -79,8 +80,8 @@ public class ReferenceVertexPropertyTest extends AbstractGremlinTest {
     public void shouldAttachToGraph() {
         final Vertex v = graph.addVertex();
         final VertexProperty toReference = v.property(VertexProperty.Cardinality.single, "test", "this");
-        final ReferenceVertexProperty rvp = ReferenceFactory.detach(toReference);
-        final VertexProperty referenced = rvp.attach(graph);
+        final ReferenceVertexProperty<?> rvp = ReferenceFactory.detach(toReference);
+        final VertexProperty referenced = rvp.attach(Attachable.Method.get(graph));
 
         assertEquals(toReference, referenced);
         assertFalse(referenced instanceof ReferenceVertexProperty);
@@ -91,8 +92,8 @@ public class ReferenceVertexPropertyTest extends AbstractGremlinTest {
     public void shouldAttachToVertex() {
         final Vertex v = graph.addVertex();
         final VertexProperty toReference = v.property(VertexProperty.Cardinality.single, "test", "this");
-        final ReferenceVertexProperty rvp = ReferenceFactory.detach(toReference);
-        final VertexProperty referenced = rvp.attach(v);
+        final ReferenceVertexProperty<?> rvp = ReferenceFactory.detach(toReference);
+        final VertexProperty referenced = rvp.attach(Attachable.Method.get(v));
 
         assertEquals(toReference, referenced);
         assertEquals(toReference.getClass(), referenced.getClass());

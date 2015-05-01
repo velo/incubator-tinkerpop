@@ -187,10 +187,10 @@ public class JsonMessageSerializerGremlinV1d0Test {
         assertEquals(v.id(), deserializedVertex.get(GraphSONTokens.ID));
         assertEquals(Vertex.DEFAULT_LABEL, deserializedVertex.get(GraphSONTokens.LABEL));
 
-        final Map<String, Object> properties = (Map<String, Object>) deserializedVertex.get(GraphSONTokens.PROPERTIES);
-        assertEquals(1, properties.size());
+        final Map<String, Object> properties = ((List<Map<String, Object>>) deserializedVertex.get(GraphSONTokens.PROPERTIES)).get(0);
+        assertEquals(3, properties.size());
 
-        final List<Object> deserializedInnerList = (List<Object>) ((Map<String, Object>) ((List<Object>) properties.get("friends")).get(0)).get(GraphSONTokens.VALUE);
+        final List<Object> deserializedInnerList = (List<Object>) properties.get(GraphSONTokens.VALUE);
         assertEquals(3, deserializedInnerList.size());
         assertEquals("x", deserializedInnerList.get(0));
         assertEquals(5, deserializedInnerList.get(1));
@@ -206,7 +206,7 @@ public class JsonMessageSerializerGremlinV1d0Test {
         final TinkerGraph graph = TinkerFactory.createClassic();
         final GraphTraversalSource g = graph.traversal();
         final Map<Vertex, Integer> map = new HashMap<>();
-        map.put(g.V().has("name", Compare.eq, "marko").next(), 1000);
+        map.put(g.V().has("name", "marko").next(), 1000);
 
         final ResponseMessage response = convert(map);
         assertCommon(response);

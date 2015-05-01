@@ -24,20 +24,17 @@ import org.apache.tinkerpop.gremlin.algorithm.generator.CommunityGeneratorTest;
 import org.apache.tinkerpop.gremlin.algorithm.generator.DistributionGeneratorTest;
 import org.apache.tinkerpop.gremlin.process.traversal.TraversalEngine;
 import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedEdgeTest;
+import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedGraphTest;
 import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedPropertyTest;
 import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedVertexPropertyTest;
 import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedVertexTest;
 import org.apache.tinkerpop.gremlin.structure.util.reference.ReferenceEdgeTest;
+import org.apache.tinkerpop.gremlin.structure.util.reference.ReferenceGraphTest;
 import org.apache.tinkerpop.gremlin.structure.util.reference.ReferenceVertexPropertyTest;
 import org.apache.tinkerpop.gremlin.structure.util.reference.ReferenceVertexTest;
 import org.apache.tinkerpop.gremlin.structure.util.star.StarGraphTest;
 import org.junit.runners.model.InitializationError;
 import org.junit.runners.model.RunnerBuilder;
-
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * The {@code StructureStandardSuite} is a JUnit test runner that executes the Gremlin Test Suite over a
@@ -61,7 +58,7 @@ import java.util.stream.Stream;
  * {@code StructureStandardSuite} will utilized Features defined in the suite to determine which tests will be
  * executed. Note that while the above example demonstrates configuration of this suite, this approach generally
  * applies to all other test suites.
- * <br/>
+ * <p/>
  * Set the {@code GREMLIN_TESTS} environment variable to a comma separated list of test classes to execute.
  * This setting can be helpful to restrict execution of tests to specific ones being focused on during development.
 
@@ -74,8 +71,8 @@ public class StructureStandardSuite extends AbstractGremlinSuite {
      * as needed to enforce tests upon implementations.
      */
     private static final Class<?>[] allTests = new Class<?>[]{
-            BatchTest.class,
             CommunityGeneratorTest.class,
+            DetachedGraphTest.class,
             DetachedEdgeTest.class,
             DetachedVertexPropertyTest.class,
             DetachedPropertyTest.class,
@@ -89,6 +86,7 @@ public class StructureStandardSuite extends AbstractGremlinSuite {
             VertexPropertyTest.class,
             VariablesTest.class,
             PropertyTest.class,
+            ReferenceGraphTest.class,
             ReferenceEdgeTest.class,
             ReferenceVertexPropertyTest.class,
             ReferenceVertexTest.class,

@@ -18,7 +18,7 @@
  */
 package org.apache.tinkerpop.gremlin.structure.util;
 
-import org.apache.tinkerpop.gremlin.process.traversal.T;
+import org.apache.tinkerpop.gremlin.structure.T;
 import org.apache.tinkerpop.gremlin.structure.Edge;
 import org.apache.tinkerpop.gremlin.structure.Element;
 import org.apache.tinkerpop.gremlin.structure.Graph;
@@ -122,11 +122,11 @@ public final class ElementHelper {
     }
 
     /**
-     * Extracts the value of the {@link org.apache.tinkerpop.gremlin.process.traversal.T#id} key from the list of arguments.
+     * Extracts the value of the {@link T#id} key from the list of arguments.
      *
      * @param keyValues a list of key/value pairs
-     * @return the value associated with {@link org.apache.tinkerpop.gremlin.process.traversal.T#id}
-     * @throws NullPointerException if the value for the {@link org.apache.tinkerpop.gremlin.process.traversal.T#id} key is {@code null}
+     * @return the value associated with {@link T#id}
+     * @throws NullPointerException if the value for the {@link T#id} key is {@code null}
      */
     public static Optional<Object> getIdValue(final Object... keyValues) {
         for (int i = 0; i < keyValues.length; i = i + 2) {
@@ -156,7 +156,7 @@ public final class ElementHelper {
                 .filter(i -> i % 2 == 0)
                 .filter(i -> !keyToRemove.equals(list.get(i)))
                 .flatMap(i -> IntStream.of(i, i + 1))
-                .mapToObj(list::get)
+                .mapToObj(i -> list.get(i))
                 .collect(Collectors.toList());
         return revised.size() > 0 ? Optional.of(revised.toArray()) : Optional.empty();
     }
@@ -165,7 +165,7 @@ public final class ElementHelper {
      * Append a key/value pair to a list of existing key/values. If the key already exists in the keyValues then
      * that value is overwritten with the provided value.
      */
-    public static Object[] upsert(final Object[] keyValues, final String key, final Object val) {
+    public static Object[] upsert(final Object[] keyValues, final Object key, final Object val) {
         if (!getKeys(keyValues).contains(key))
             return Stream.concat(Stream.of(keyValues), Stream.of(key, val)).toArray();
         else {
@@ -229,12 +229,12 @@ public final class ElementHelper {
     }
 
     /**
-     * Extracts the value of the {@link org.apache.tinkerpop.gremlin.process.traversal.T#label} key from the list of arguments.
+     * Extracts the value of the {@link T#label} key from the list of arguments.
      *
      * @param keyValues a list of key/value pairs
-     * @return the value associated with {@link org.apache.tinkerpop.gremlin.process.traversal.T#label}
+     * @return the value associated with {@link T#label}
      * @throws ClassCastException   if the value of the label is not a {@link String}
-     * @throws NullPointerException if the value for the {@link org.apache.tinkerpop.gremlin.process.traversal.T#label} key is {@code null}
+     * @throws NullPointerException if the value for the {@link T#label} key is {@code null}
      */
     public static Optional<String> getLabelValue(final Object... keyValues) {
         for (int i = 0; i < keyValues.length; i = i + 2) {
@@ -247,8 +247,8 @@ public final class ElementHelper {
     }
 
     /**
-     * Assign key/value pairs as properties to an {@link org.apache.tinkerpop.gremlin.structure.Element}.  If the value of {@link org.apache.tinkerpop.gremlin.process.traversal.T#id} or
-     * {@link org.apache.tinkerpop.gremlin.process.traversal.T#label} is in the set of pairs, then they are ignored.
+     * Assign key/value pairs as properties to an {@link org.apache.tinkerpop.gremlin.structure.Element}.  If the value of {@link T#id} or
+     * {@link T#label} is in the set of pairs, then they are ignored.
      *
      * @param element           the graph element to assign the {@code propertyKeyValues}
      * @param propertyKeyValues the key/value pairs to assign to the {@code element}
@@ -266,8 +266,8 @@ public final class ElementHelper {
     }
 
     /**
-     * Assign key/value pairs as properties to a {@link org.apache.tinkerpop.gremlin.structure.Vertex}.  If the value of {@link org.apache.tinkerpop.gremlin.process.traversal.T#id} or
-     * {@link org.apache.tinkerpop.gremlin.process.traversal.T#label} is in the set of pairs, then they are ignored.
+     * Assign key/value pairs as properties to a {@link org.apache.tinkerpop.gremlin.structure.Vertex}.  If the value of {@link T#id} or
+     * {@link T#label} is in the set of pairs, then they are ignored.
      *
      * @param vertex            the vertex to attach the properties to
      * @param cardinality       the cardinality of the key value pair settings

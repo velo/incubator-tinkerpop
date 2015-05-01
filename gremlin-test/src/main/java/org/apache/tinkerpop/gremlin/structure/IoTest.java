@@ -28,24 +28,26 @@ import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import org.apache.commons.configuration.Configuration;
-import org.apache.commons.io.FileUtils;
 import org.apache.tinkerpop.gremlin.AbstractGremlinTest;
 import org.apache.tinkerpop.gremlin.FeatureRequirement;
 import org.apache.tinkerpop.gremlin.LoadGraphWith;
 import org.apache.tinkerpop.gremlin.TestHelper;
-import org.apache.tinkerpop.gremlin.process.traversal.T;
 import org.apache.tinkerpop.gremlin.structure.Graph.Features.EdgePropertyFeatures;
 import org.apache.tinkerpop.gremlin.structure.Graph.Features.VertexPropertyFeatures;
 import org.apache.tinkerpop.gremlin.structure.io.GraphMigrator;
 import org.apache.tinkerpop.gremlin.structure.io.GraphReader;
 import org.apache.tinkerpop.gremlin.structure.io.GraphWriter;
+import org.apache.tinkerpop.gremlin.structure.io.Io;
+import org.apache.tinkerpop.gremlin.structure.io.graphml.GraphMLIo;
 import org.apache.tinkerpop.gremlin.structure.io.graphml.GraphMLReader;
 import org.apache.tinkerpop.gremlin.structure.io.graphml.GraphMLWriter;
+import org.apache.tinkerpop.gremlin.structure.io.graphson.GraphSONIo;
 import org.apache.tinkerpop.gremlin.structure.io.graphson.GraphSONMapper;
 import org.apache.tinkerpop.gremlin.structure.io.graphson.GraphSONReader;
 import org.apache.tinkerpop.gremlin.structure.io.graphson.GraphSONTokens;
 import org.apache.tinkerpop.gremlin.structure.io.graphson.GraphSONWriter;
 import org.apache.tinkerpop.gremlin.structure.io.graphson.LegacyGraphSONReader;
+import org.apache.tinkerpop.gremlin.structure.io.gryo.GryoIo;
 import org.apache.tinkerpop.gremlin.structure.io.gryo.GryoMapper;
 import org.apache.tinkerpop.gremlin.structure.io.gryo.GryoReader;
 import org.apache.tinkerpop.gremlin.structure.io.gryo.GryoWriter;
@@ -54,7 +56,7 @@ import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedFactory;
 import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedVertex;
 import org.apache.tinkerpop.gremlin.util.StreamFactory;
 import org.apache.tinkerpop.gremlin.util.iterator.IteratorUtils;
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 
 import javax.xml.XMLConstants;
@@ -78,6 +80,7 @@ import java.io.StringWriter;
 import java.io.Writer;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -86,6 +89,9 @@ import static org.apache.tinkerpop.gremlin.structure.Graph.Features.ElementFeatu
 import static org.apache.tinkerpop.gremlin.structure.Graph.Features.VariableFeatures.FEATURE_VARIABLES;
 import static org.apache.tinkerpop.gremlin.structure.Graph.Features.VertexFeatures.FEATURE_USER_SUPPLIED_IDS;
 import static org.apache.tinkerpop.gremlin.structure.Graph.Features.VertexPropertyFeatures.*;
+import static org.apache.tinkerpop.gremlin.structure.io.IoCore.graphml;
+import static org.apache.tinkerpop.gremlin.structure.io.IoCore.graphson;
+import static org.apache.tinkerpop.gremlin.structure.io.IoCore.gryo;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.mock;
 
@@ -99,17 +105,15 @@ public class IoTest extends AbstractGremlinTest {
     private static final String GRAPHML_RESOURCE_PATH_PREFIX = "/org/apache/tinkerpop/gremlin/structure/io/graphml/";
     private static final String GRAPHSON_RESOURCE_PATH_PREFIX = "/org/apache/tinkerpop/gremlin/structure/io/graphson/";
 
-    private static String tempPath;
+    private Io.Builder<GraphMLIo> graphml;
+    private Io.Builder<GraphSONIo> graphson;
+    private Io.Builder<GryoIo> gryo;
 
-    static {
-        tempPath = TestHelper.makeTestDataPath(IoTest.class, "iotest").getPath() + File.separator;
-    }
-
-    @BeforeClass
-    public static void before() throws IOException {
-        final File tempDir = new File(tempPath);
-        FileUtils.deleteDirectory(tempDir);
-        if (!tempDir.mkdirs()) throw new IOException(String.format("Could not create %s", tempDir));
+    @Before
+    public void setupBeforeEachTest() {
+        graphml = graphml();
+        graphson = graphson();
+        gryo = gryo();
     }
 
     @Test
@@ -158,11 +162,11 @@ public class IoTest extends AbstractGremlinTest {
     public void shouldReadWriteClassicToGraphMLToFileWithHelpers() throws Exception {
         final File f = TestHelper.generateTempFile(this.getClass(), name.getMethodName(), ".xml");
         try {
-            graph.io().writeGraphML(f.getAbsolutePath());
+            graph.io(graphml).writeGraph(f.getAbsolutePath());
 
             final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.CLASSIC);
             final Graph g1 = graphProvider.openTestGraph(configuration);
-            g1.io().readGraphML(f.getAbsolutePath());
+            g1.io(graphml).readGraph(f.getAbsolutePath());
 
             assertClassicGraph(graph, false, true);
 
@@ -210,8 +214,8 @@ public class IoTest extends AbstractGremlinTest {
     @LoadGraphWith(LoadGraphWith.GraphData.CLASSIC)
     public void shouldWriteNormalizedGraphSON() throws Exception {
         try (ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
-            final GraphSONMapper mapper = graph.io().graphSONMapper().normalize(true).create();
-            final GraphSONWriter w = graph.io().graphSONWriter().mapper(mapper).create();
+            final GraphSONMapper mapper = graph.io(graphson).mapper().normalize(true).create();
+            final GraphSONWriter w = graph.io(graphson).writer().mapper(mapper).create();
             w.writeGraph(bos, graph);
 
             final String expected = streamToString(IoTest.class.getResourceAsStream(GRAPHSON_RESOURCE_PATH_PREFIX + "tinkerpop-classic-normalized.json"));
@@ -274,15 +278,14 @@ public class IoTest extends AbstractGremlinTest {
 
         final SimpleModule module = new SimpleModule();
         module.addSerializer(CustomId.class, new CustomId.CustomIdJacksonSerializer());
-        final GraphWriter writer = graph.io().graphSONWriter().mapper(
-                graph.io().graphSONMapper().addCustomModule(module).embedTypes(true).create()).create();
+        final GraphWriter writer = graph.io(graphson).writer().mapper(
+                graph.io(graphson).mapper().addCustomModule(module).embedTypes(true).create()).create();
 
         try (final ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             writer.writeGraph(baos, graph);
 
             final JsonNode jsonGraph = new ObjectMapper().readTree(baos.toByteArray());
-            final JsonNode onlyVertex = jsonGraph.findValues(GraphSONTokens.VERTICES).get(0).get(0);
-            final JsonNode idValue = onlyVertex.get(GraphSONTokens.ID);
+            final JsonNode idValue = jsonGraph.get(GraphSONTokens.ID);
             assertTrue(idValue.has("cluster"));
             assertEquals("vertex", idValue.get("cluster").asText());
             assertTrue(idValue.has("elementId"));
@@ -294,8 +297,8 @@ public class IoTest extends AbstractGremlinTest {
             final Graph g2 = graphProvider.openTestGraph(configuration);
 
             try (final InputStream is = new ByteArrayInputStream(baos.toByteArray())) {
-                final GraphReader reader = graph.io().graphSONReader()
-                        .mapper(graph.io().graphSONMapper().embedTypes(true).addCustomModule(module).create()).create();
+                final GraphReader reader = graph.io(graphson).reader()
+                        .mapper(graph.io(graphson).mapper().embedTypes(true).addCustomModule(module).create()).create();
                 reader.readGraph(is, g2);
             }
 
@@ -318,7 +321,7 @@ public class IoTest extends AbstractGremlinTest {
         final GryoMapper gryo = GryoMapper.build().addCustom(CustomId.class).create();
 
         final GryoWriter writer = GryoWriter.build().mapper(gryo).create();
-        final GryoReader reader = GryoReader.build().workingDirectory(tempPath).mapper(gryo).create();
+        final GryoReader reader = GryoReader.build().mapper(gryo).create();
 
         final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), null);
         graphProvider.clear(configuration);
@@ -344,8 +347,8 @@ public class IoTest extends AbstractGremlinTest {
         graphProvider.clear(configuration);
         final Graph g1 = graphProvider.openTestGraph(configuration);
 
-        final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
-        final GryoWriter writer = graph.io().gryoWriter().create();
+        final GryoReader reader = graph.io(gryo).reader().create();
+        final GryoWriter writer = graph.io(gryo).writer().create();
 
         GraphMigrator.migrateGraph(graph, g1, reader, writer);
 
@@ -364,8 +367,8 @@ public class IoTest extends AbstractGremlinTest {
         graphProvider.clear(configuration);
         final Graph g1 = graphProvider.openTestGraph(configuration);
 
-        final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
-        final GryoWriter writer = graph.io().gryoWriter().create();
+        final GryoReader reader = graph.io(gryo).reader().create();
+        final GryoWriter writer = graph.io(gryo).writer().create();
 
         GraphMigrator.migrateGraph(graph, g1, reader, writer);
 
@@ -384,14 +387,15 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
     public void shouldReadWriteModernToGryo() throws Exception {
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
+            final GryoWriter writer = graph.io(gryo).writer().create();
             writer.writeGraph(os, graph);
 
             final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.MODERN);
             graphProvider.clear(configuration);
             final Graph g1 = graphProvider.openTestGraph(configuration);
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
-            try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
+            final GryoReader reader = graph.io(gryo).reader().create();
+            final byte[] x = os.toByteArray();
+            try (final ByteArrayInputStream bais = new ByteArrayInputStream(x)) {
                 reader.readGraph(bais, g1);
             }
 
@@ -412,11 +416,11 @@ public class IoTest extends AbstractGremlinTest {
     public void shouldReadWriteModernToGryoToFileWithHelpers() throws Exception {
         final File f = TestHelper.generateTempFile(this.getClass(), name.getMethodName(), ".kryo");
         try {
-            graph.io().writeGryo(f.getAbsolutePath());
+            graph.io(gryo).writeGraph(f.getAbsolutePath());
 
             final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.MODERN);
             final Graph g1 = graphProvider.openTestGraph(configuration);
-            g1.io().readGryo(f.getAbsolutePath());
+            g1.io(gryo).readGraph(f.getAbsolutePath());
 
             // by making this lossy for float it will assert floats for doubles
             assertModernGraph(g1, true, false);
@@ -438,15 +442,14 @@ public class IoTest extends AbstractGremlinTest {
     public void shouldReadWriteCrewToGryo() throws Exception {
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
 
-            final GryoWriter writer = graph.io().gryoWriter().create();
+            final GryoWriter writer = graph.io(gryo).writer().create();
             writer.writeGraph(os, graph);
 
             final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.CREW);
             graphProvider.clear(configuration);
             final Graph g1 = graphProvider.openTestGraph(configuration);
             final GryoReader reader = GryoReader.build()
-                    .mapper(graph.io().gryoMapper().create())
-                    .workingDirectory(tempPath).create();
+                    .mapper(graph.io(gryo).mapper().create()).create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readGraph(bais, g1);
             }
@@ -468,13 +471,13 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
     public void shouldReadWriteClassicToGryo() throws Exception {
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
+            final GryoWriter writer = graph.io(gryo).writer().create();
             writer.writeGraph(os, graph);
 
             final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.CLASSIC);
             graphProvider.clear(configuration);
             final Graph g1 = graphProvider.openTestGraph(configuration);
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
+            final GryoReader reader = graph.io(gryo).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readGraph(bais, g1);
             }
@@ -492,13 +495,13 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
     public void shouldReadWriteClassicToGraphSON() throws Exception {
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().create();
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
             writer.writeGraph(os, graph);
 
             final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.CLASSIC);
             graphProvider.clear(configuration);
             final Graph g1 = graphProvider.openTestGraph(configuration);
-            final GraphSONReader reader = graph.io().graphSONReader().create();
+            final GraphSONReader reader = graph.io(graphson).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readGraph(bais, g1);
             }
@@ -516,13 +519,13 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
     public void shouldReadWriteModernToGraphSON() throws Exception {
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().create();
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
             writer.writeGraph(os, graph);
 
             final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.MODERN);
             graphProvider.clear(configuration);
             final Graph g1 = graphProvider.openTestGraph(configuration);
-            final GraphSONReader reader = graph.io().graphSONReader().create();
+            final GraphSONReader reader = graph.io(graphson).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readGraph(bais, g1);
             }
@@ -541,12 +544,12 @@ public class IoTest extends AbstractGremlinTest {
     public void shouldReadWriteModernToGraphSONWithHelpers() throws Exception {
         final File f = TestHelper.generateTempFile(this.getClass(), name.getMethodName(), ".json");
         try {
-            graph.io().writeGraphSON(f.getAbsolutePath());
+            graph.io(graphson).writeGraph(f.getAbsolutePath());
 
             final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.MODERN);
             graphProvider.clear(configuration);
             final Graph g1 = graphProvider.openTestGraph(configuration);
-            g1.io().readGraphSON(f.getAbsolutePath());
+            g1.io(graphson).readGraph(f.getAbsolutePath());
 
             assertModernGraph(g1, true, false);
 
@@ -566,13 +569,13 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
     public void shouldReadWriteCrewToGraphSON() throws Exception {
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().create();
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
             writer.writeGraph(os, graph);
 
             final Configuration configuration = graphProvider.newGraphConfiguration("readGraph", this.getClass(), name.getMethodName(), LoadGraphWith.GraphData.CREW);
             graphProvider.clear(configuration);
             final Graph g1 = graphProvider.openTestGraph(configuration);
-            final GraphSONReader reader = graph.io().graphSONReader().create();
+            final GraphSONReader reader = graph.io(graphson).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
                 reader.readGraph(bais, g1);
             }
@@ -594,13 +597,14 @@ public class IoTest extends AbstractGremlinTest {
         final Edge e = v1.addEdge("friend", v2, "weight", 0.5f, "acl", "rw");
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
+            final GryoWriter writer = graph.io(gryo).writer().create();
             writer.writeEdge(os, e);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
+            final GryoReader reader = graph.io(gryo).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readEdge(bais, detachedEdge -> {
+                reader.readEdge(bais, edge -> {
+                    final Edge detachedEdge = (Edge) edge;
                     assertEquals(e.id(), detachedEdge.id());
                     assertEquals(v1.id(), detachedEdge.outVertex().id());
                     assertEquals(v2.id(), detachedEdge.inVertex().id());
@@ -630,13 +634,14 @@ public class IoTest extends AbstractGremlinTest {
         final Edge e = v1.addEdge("friend", v2, "weight", 0.5d, "acl", "rw");
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
+            final GryoWriter writer = graph.io(gryo).writer().create();
             writer.writeEdge(os, e);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
+            final GryoReader reader = graph.io(gryo).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readEdge(bais, detachedEdge -> {
+                reader.readEdge(bais, edge -> {
+                    final Edge detachedEdge = (Edge) edge;
                     assertEquals(e.id(), detachedEdge.id());
                     assertEquals(v1.id(), detachedEdge.outVertex().id());
                     assertEquals(v2.id(), detachedEdge.inVertex().id());
@@ -664,13 +669,14 @@ public class IoTest extends AbstractGremlinTest {
         final Edge e = DetachedFactory.detach(v1.addEdge("friend", v2, "weight", 0.5d, "acl", "rw"), false);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
+            final GryoWriter writer = graph.io(gryo).writer().create();
             writer.writeEdge(os, e);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
+            final GryoReader reader = graph.io(gryo).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readEdge(bais, detachedEdge -> {
+                reader.readEdge(bais, edge -> {
+                    final Edge detachedEdge = (Edge) edge;
                     assertEquals(e.id(), detachedEdge.id());
                     assertEquals(v1.id(), detachedEdge.outVertex().id());
                     assertEquals(v2.id(), detachedEdge.inVertex().id());
@@ -698,13 +704,14 @@ public class IoTest extends AbstractGremlinTest {
         final Edge e = DetachedFactory.detach(v1.addEdge("friend", v2, "weight", 0.5d, "acl", "rw"), true);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
+            final GryoWriter writer = graph.io(gryo).writer().create();
             writer.writeEdge(os, e);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
+            final GryoReader reader = graph.io(gryo).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readEdge(bais, detachedEdge -> {
+                reader.readEdge(bais, edge -> {
+                    final Edge detachedEdge = (Edge) edge;
                     assertEquals(e.id(), detachedEdge.id());
                     assertEquals(v1.id(), detachedEdge.outVertex().id());
                     assertEquals(v2.id(), detachedEdge.inVertex().id());
@@ -733,13 +740,14 @@ public class IoTest extends AbstractGremlinTest {
         final Edge e = v1.addEdge("friend", v2, "weight", 0.5f, "acl", "rw");
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().create();
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
             writer.writeEdge(os, e);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GraphSONReader reader = graph.io().graphSONReader().create();
+            final GraphSONReader reader = graph.io(graphson).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readEdge(bais, detachedEdge -> {
+                reader.readEdge(bais, edge -> {
+                    final Edge detachedEdge = (Edge) edge;
                     assertEquals(e.id(), graph.edges(detachedEdge.id().toString()).next().id());
                     assertEquals(v1.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
                     assertEquals(v2.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
@@ -768,13 +776,14 @@ public class IoTest extends AbstractGremlinTest {
         final Edge e = DetachedFactory.detach(v1.addEdge("friend", v2, "weight", 0.5f, "acl", "rw"), false);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().create();
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
             writer.writeEdge(os, e);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GraphSONReader reader = graph.io().graphSONReader().create();
+            final GraphSONReader reader = graph.io(graphson).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readEdge(bais, detachedEdge -> {
+                reader.readEdge(bais, edge -> {
+                    final Edge detachedEdge = (Edge) edge;
                     assertEquals(e.id(), graph.edges(detachedEdge.id().toString()).next().id());
                     assertEquals(v1.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
                     assertEquals(v2.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
@@ -802,13 +811,14 @@ public class IoTest extends AbstractGremlinTest {
         final Edge e = DetachedFactory.detach(v1.addEdge("friend", v2, "weight", 0.5f, "acl", "rw"), true);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().create();
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
             writer.writeEdge(os, e);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GraphSONReader reader = graph.io().graphSONReader().create();
+            final GraphSONReader reader = graph.io(graphson).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readEdge(bais, detachedEdge -> {
+                reader.readEdge(bais, edge -> {
+                    final Edge detachedEdge = (Edge) edge;
                     assertEquals(e.id(), graph.edges(detachedEdge.id().toString()).next().id());
                     assertEquals(v1.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
                     assertEquals(v2.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
@@ -838,13 +848,14 @@ public class IoTest extends AbstractGremlinTest {
         final Edge e = v1.addEdge("friend", v2, "weight", 0.5f, "acl", "rw");
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().mapper(graph.io().graphSONMapper().embedTypes(true).create()).create();
+            final GraphSONWriter writer = graph.io(graphson).writer().mapper(graph.io(graphson).mapper().embedTypes(true).create()).create();
             writer.writeEdge(os, e);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GraphSONReader reader = graph.io().graphSONReader().mapper(graph.io().graphSONMapper().embedTypes(true).create()).create();
+            final GraphSONReader reader = graph.io(graphson).reader().mapper(graph.io(graphson).mapper().embedTypes(true).create()).create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readEdge(bais, detachedEdge -> {
+                reader.readEdge(bais, edge -> {
+                    final Edge detachedEdge = (Edge) edge;
                     assertEquals(e.id(), detachedEdge.id());
                     assertEquals(v1.id(), detachedEdge.outVertex().id());
                     assertEquals(v2.id(), detachedEdge.inVertex().id());
@@ -874,13 +885,14 @@ public class IoTest extends AbstractGremlinTest {
         final Edge e = v1.addEdge("friend", v2, "uuid", id);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().mapper(graph.io().graphSONMapper().embedTypes(true).create()).create();
+            final GraphSONWriter writer = graph.io(graphson).writer().mapper(graph.io(graphson).mapper().embedTypes(true).create()).create();
             writer.writeEdge(os, e);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GraphSONReader reader = graph.io().graphSONReader().mapper(graph.io().graphSONMapper().embedTypes(true).create()).create();
+            final GraphSONReader reader = graph.io(graphson).reader().mapper(graph.io(graphson).mapper().embedTypes(true).create()).create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readEdge(bais, detachedEdge -> {
+                reader.readEdge(bais, edge -> {
+                    final Edge detachedEdge = (Edge) edge;
                     // a quick reminder here that the purpose of these id assertions is to ensure that those with
                     // complex ids that are not simply toString'd (i.e. are complex objects in JSON as well)
                     // properly respond to filtering in Graph.edges/vertices
@@ -914,13 +926,14 @@ public class IoTest extends AbstractGremlinTest {
         final Edge e = v1.addEdge("friend", v2, "uuid", id);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
+            final GryoWriter writer = graph.io(gryo).writer().create();
             writer.writeEdge(os, e);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
+            final GryoReader reader = graph.io(gryo).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readEdge(bais, detachedEdge -> {
+                reader.readEdge(bais, edge -> {
+                    final Edge detachedEdge = (Edge) edge;
                     assertEquals(e.id(), detachedEdge.id());
                     assertEquals(v1.id(), detachedEdge.outVertex().id());
                     assertEquals(v2.id(), detachedEdge.inVertex().id());
@@ -952,13 +965,14 @@ public class IoTest extends AbstractGremlinTest {
         v1.addEdge("friends", v2, "weight", 0.5f);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
+            final GryoWriter writer = graph.io(gryo).writer().create();
             writer.writeVertex(os, v1);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
+            final GryoReader reader = graph.io(gryo).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, detachedVertex -> {
+                reader.readVertex(bais, attachable -> {
+                    final Vertex detachedVertex = attachable.get();
                     assertEquals(v1.id(), detachedVertex.id());
                     assertEquals(v1.label(), detachedVertex.label());
                     assertEquals(2, IteratorUtils.count(detachedVertex.properties()));
@@ -983,13 +997,14 @@ public class IoTest extends AbstractGremlinTest {
         v1.addEdge("friends", v2, "weight", 0.5d);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
+            final GryoWriter writer = graph.io(gryo).writer().create();
             writer.writeVertex(os, v1);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
+            final GryoReader reader = graph.io(gryo).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, detachedVertex -> {
+                reader.readVertex(bais, attachable -> {
+                    final Vertex detachedVertex = attachable.get();
                     assertEquals(v1.id(), detachedVertex.id());
                     assertEquals(v1.label(), detachedVertex.label());
                     assertEquals(2, IteratorUtils.count(detachedVertex.properties()));
@@ -1014,14 +1029,15 @@ public class IoTest extends AbstractGremlinTest {
         v1.addEdge("friends", v2, "weight", 0.5d);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
+            final GryoWriter writer = graph.io(gryo).writer().create();
             final DetachedVertex dv = DetachedFactory.detach(v1, true);
             writer.writeVertex(os, dv);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
+            final GryoReader reader = graph.io(gryo).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, detachedVertex -> {
+                reader.readVertex(bais, attachable -> {
+                    final Vertex detachedVertex = attachable.get();
                     assertEquals(v1.id(), detachedVertex.id());
                     assertEquals(v1.label(), detachedVertex.label());
                     assertEquals(2, IteratorUtils.count(detachedVertex.properties()));
@@ -1046,14 +1062,15 @@ public class IoTest extends AbstractGremlinTest {
         v1.addEdge("friends", v2, "weight", 0.5d);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
+            final GryoWriter writer = graph.io(gryo).writer().create();
             final DetachedVertex dv = DetachedFactory.detach(v1, false);
             writer.writeVertex(os, dv);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
+            final GryoReader reader = graph.io(gryo).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, detachedVertex -> {
+                reader.readVertex(bais, attachable -> {
+                    final Vertex detachedVertex = attachable.get();
                     assertEquals(v1.id(), detachedVertex.id());
                     assertEquals(v1.label(), detachedVertex.label());
                     assertEquals(0, IteratorUtils.count(detachedVertex.properties()));
@@ -1079,13 +1096,14 @@ public class IoTest extends AbstractGremlinTest {
         v1.addEdge("friends", v2, "weight", 0.5d);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
+            final GryoWriter writer = graph.io(gryo).writer().create();
             writer.writeVertex(os, v1);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
+            final GryoReader reader = graph.io(gryo).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, detachedVertex -> {
+                reader.readVertex(bais, attachable -> {
+                    final Vertex detachedVertex = attachable.get();
                     assertEquals(v1.id(), detachedVertex.id());
                     assertEquals(v1.label(), detachedVertex.label());
                     assertEquals(4, IteratorUtils.count(detachedVertex.properties()));
@@ -1114,13 +1132,14 @@ public class IoTest extends AbstractGremlinTest {
         v1.addEdge("friends", v2, "weight", 0.5f);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().create();
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
             writer.writeVertex(os, v1);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GraphSONReader reader = graph.io().graphSONReader().create();
+            final GraphSONReader reader = graph.io(graphson).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, detachedVertex -> {
+                reader.readVertex(bais, attachable -> {
+                    final Vertex detachedVertex = attachable.get();
                     assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
                     assertEquals(v1.label(), detachedVertex.label());
                     assertEquals(2, IteratorUtils.count(detachedVertex.properties()));
@@ -1147,14 +1166,15 @@ public class IoTest extends AbstractGremlinTest {
         v1.addEdge("friends", v2, "weight", 0.5f);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().create();
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
             final DetachedVertex dv = DetachedFactory.detach(v1, true);
             writer.writeVertex(os, dv);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GraphSONReader reader = graph.io().graphSONReader().create();
+            final GraphSONReader reader = graph.io(graphson).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, detachedVertex -> {
+                reader.readVertex(bais, attachable -> {
+                    final Vertex detachedVertex = attachable.get();
                     assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
                     assertEquals(v1.label(), detachedVertex.label());
                     assertEquals(2, IteratorUtils.count(detachedVertex.properties()));
@@ -1181,14 +1201,15 @@ public class IoTest extends AbstractGremlinTest {
         v1.addEdge("friends", v2, "weight", 0.5f);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().create();
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
             final DetachedVertex dv = DetachedFactory.detach(v1, false);
             writer.writeVertex(os, dv);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GraphSONReader reader = graph.io().graphSONReader().create();
+            final GraphSONReader reader = graph.io(graphson).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, detachedVertex -> {
+                reader.readVertex(bais, attachable -> {
+                    final Vertex detachedVertex = attachable.get();
                     assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
                     assertEquals(v1.label(), detachedVertex.label());
                     assertEquals(0, IteratorUtils.count(detachedVertex.properties()));
@@ -1216,13 +1237,14 @@ public class IoTest extends AbstractGremlinTest {
         v1.addEdge("friends", v2, "weight", 0.5d);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().create();
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
             writer.writeVertex(os, v1);
 
             final AtomicBoolean called = new AtomicBoolean(false);
-            final GraphSONReader reader = graph.io().graphSONReader().create();
+            final GraphSONReader reader = graph.io(graphson).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, detachedVertex -> {
+                reader.readVertex(bais, attachable -> {
+                    final Vertex detachedVertex = attachable.get();
                     assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
                     assertEquals(v1.label(), detachedVertex.label());
                     assertEquals(4, IteratorUtils.count(detachedVertex.properties()));
@@ -1243,21 +1265,24 @@ public class IoTest extends AbstractGremlinTest {
     @LoadGraphWith(LoadGraphWith.GraphData.CLASSIC)
     public void shouldReadWriteVerticesNoEdgesToGryoManual() throws Exception {
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
-            writer.writeVertices(os, g.V().has("age", Compare.gt, 30));
+            final GryoWriter writer = graph.io(gryo).writer().create();
+            writer.writeVertices(os, g.V().has("age", P.gt(30)));
 
             final AtomicInteger called = new AtomicInteger(0);
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
-
+            final GryoReader reader = graph.io(gryo).reader().create();
             try (final VertexByteArrayInputStream vbais = new VertexByteArrayInputStream(new ByteArrayInputStream(os.toByteArray()))) {
-                reader.readVertex(new ByteArrayInputStream(vbais.readVertexBytes().toByteArray()),
-                        detachedVertex -> {
+                final byte[] y = vbais.readVertexBytes().toByteArray();
+                reader.readVertex(new ByteArrayInputStream(y),
+                        attachable -> {
+                            final Vertex detachedVertex = attachable.get();
                             called.incrementAndGet();
                             return detachedVertex;
                         });
 
-                reader.readVertex(new ByteArrayInputStream(vbais.readVertexBytes().toByteArray()),
-                        detachedVertex -> {
+                final byte[] z = vbais.readVertexBytes().toByteArray();
+                reader.readVertex(new ByteArrayInputStream(z),
+                        attachable -> {
+                            final Vertex detachedVertex = attachable.get();
                             called.incrementAndGet();
                             return detachedVertex;
                         });
@@ -1271,18 +1296,46 @@ public class IoTest extends AbstractGremlinTest {
     @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
     public void shouldReadWriteVerticesNoEdgesToGryo() throws Exception {
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
-            writer.writeVertices(os, g.V().has("age", Compare.gt, 30));
+            final GryoWriter writer = graph.io(gryo).writer().create();
+            writer.writeVertices(os, g.V().has("age", P.gt(30)));
 
             final AtomicInteger called = new AtomicInteger(0);
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
+            final GryoReader reader = graph.io(gryo).reader().create();
 
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                final Iterator<Vertex> itty = reader.readVertices(bais, null,
-                        detachedVertex -> {
+                final Iterator<Vertex> itty = reader.readVertices(bais,
+                        attachable -> {
+                            final Vertex detachedVertex = attachable.get();
                             called.incrementAndGet();
                             return detachedVertex;
-                        }, null);
+                        }, null, null);
+
+                assertNotNull(itty.next());
+                assertNotNull(itty.next());
+                assertFalse(itty.hasNext());
+            }
+
+            assertEquals(2, called.get());
+        }
+    }
+
+    @Test
+    @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
+    public void shouldReadWriteVerticesNoEdgesToGraphSON() throws Exception {
+        try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
+            writer.writeVertices(os, g.V().has("age", P.gt(30)));
+
+            final AtomicInteger called = new AtomicInteger(0);
+            final GraphSONReader reader = graph.io(graphson).reader().create();
+
+            try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
+                final Iterator<Vertex> itty = reader.readVertices(bais,
+                        attachable -> {
+                            final Vertex detachedVertex = attachable.get();
+                            called.incrementAndGet();
+                            return detachedVertex;
+                        }, null, null);
 
                 assertNotNull(itty.next());
                 assertNotNull(itty.next());
@@ -1297,15 +1350,15 @@ public class IoTest extends AbstractGremlinTest {
     @LoadGraphWith(LoadGraphWith.GraphData.CLASSIC)
     public void shouldReadWriteVerticesNoEdgesToGraphSONManual() throws Exception {
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().create();
-            writer.writeVertices(os, g.V().has("age", Compare.gt, 30));
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
+            writer.writeVertices(os, g.V().has("age", P.gt(30)));
 
             final AtomicInteger called = new AtomicInteger(0);
-            final GraphSONReader reader = graph.io().graphSONReader().create();
+            final GraphSONReader reader = graph.io(graphson).reader().create();
             final BufferedReader br = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(os.toByteArray())));
             String line = br.readLine();
             reader.readVertex(new ByteArrayInputStream(line.getBytes()),
-                    detachedVertex -> {
+                    attachable -> {
                         called.incrementAndGet();
                         return mock(Vertex.class);
                     });
@@ -1327,43 +1380,34 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
     @FeatureRequirement(featureClass = VertexPropertyFeatures.class, feature = FEATURE_STRING_VALUES)
     @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_DOUBLE_VALUES)
-    public void shouldReadWriteVertexWithOUTOUTEdgesToGryo() throws Exception {
+    public void shouldReadWriteVertexWithOUTEdgesToGryo() throws Exception {
         final Vertex v1 = graph.addVertex("name", "marko", T.label, "person");
 
         final Vertex v2 = graph.addVertex(T.label, "person");
         final Edge e = v1.addEdge("friends", v2, "weight", 0.5d);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
+            final GryoWriter writer = graph.io(gryo).writer().create();
             writer.writeVertex(os, v1, Direction.OUT);
 
             final AtomicBoolean calledVertex = new AtomicBoolean(false);
             final AtomicBoolean calledEdge = new AtomicBoolean(false);
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
+            final GryoReader reader = graph.io(gryo).reader().create();
 
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, Direction.OUT, detachedVertex -> {
-                            assertEquals(v1.id(), detachedVertex.id());
-                            assertEquals(v1.label(), detachedVertex.label());
-                            assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
-                            assertEquals(v1.value("name"), detachedVertex.value("name").toString());
+                reader.readVertex(bais, attachable -> {
+                            final Vertex detachedVertex = attachable.get();
+                            TestHelper.validateVertexEquality(v1, detachedVertex, true);
                             calledVertex.set(true);
                             return detachedVertex;
                         },
-                        detachedEdge -> {
-                            assertEquals(e.id(), detachedEdge.id());
-                            assertEquals(v1.id(), detachedEdge.outVertex().id());
-                            assertEquals(v2.id(), detachedEdge.inVertex().id());
-                            assertEquals(v1.label(), detachedEdge.outVertex().label());
-                            assertEquals(v2.label(), detachedEdge.inVertex().label());
-                            assertEquals(e.label(), detachedEdge.label());
-                            assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
-                            assertEquals(0.5d, detachedEdge.value("weight"), 0.00001d);
-
+                        attachable -> {
+                            final Edge detachedEdge = attachable.get();
+                            TestHelper.validateEdgeEquality(e, detachedEdge);
                             calledEdge.set(true);
 
                             return detachedEdge;
-                        });
+                        }, Direction.OUT);
             }
 
             assertTrue(calledVertex.get());
@@ -1377,40 +1421,40 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = VertexPropertyFeatures.class, feature = FEATURE_STRING_VALUES)
     @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_FLOAT_VALUES)
     @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_DOUBLE_VALUES)
-    public void shouldReadWriteVertexWithOUTOUTEdgesToGraphSON() throws Exception {
+    public void shouldReadWriteVertexWithOUTEdgesToGraphSON() throws Exception {
         final Vertex v1 = graph.addVertex("name", "marko", T.label, "person");
         final Vertex v2 = graph.addVertex(T.label, "person");
         final Edge e = v1.addEdge("friends", v2, "weight", 0.5f);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().create();
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
             writer.writeVertex(os, v1, Direction.OUT);
 
             final AtomicBoolean calledVertex = new AtomicBoolean(false);
             final AtomicBoolean calledEdge = new AtomicBoolean(false);
-            final GraphSONReader reader = graph.io().graphSONReader().create();
+            final GraphSONReader reader = graph.io(graphson).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, Direction.OUT, detachedVertex -> {
-                            assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
-                            assertEquals(v1.label(), detachedVertex.label());
-                            assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
-                            assertEquals("marko", detachedVertex.value("name"));
-                            calledVertex.set(true);
-                            return null;
-                        },
-                        detachedEdge -> {
-                            assertEquals(e.id(), graph.edges(detachedEdge.id().toString()).next().id());
-                            assertEquals(v1.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
-                            assertEquals(v2.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
-                            assertEquals(v1.label(), detachedEdge.outVertex().label());
-                            assertEquals(v2.label(), detachedEdge.inVertex().label());
-                            assertEquals(e.label(), detachedEdge.label());
-                            assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
-                            assertEquals(0.5d, detachedEdge.value("weight"), 0.000001d);                      // lossy
+                reader.readVertex(bais, attachable -> {
+                    final Vertex detachedVertex = attachable.get();
+                    assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
+                    assertEquals(v1.label(), detachedVertex.label());
+                    assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
+                    assertEquals("marko", detachedVertex.value("name"));
+                    calledVertex.set(true);
+                    return null;
+                }, attachable -> {
+                    final Edge detachedEdge = attachable.get();
+                    assertEquals(e.id(), graph.edges(detachedEdge.id().toString()).next().id());
+                    assertEquals(v1.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
+                    assertEquals(v2.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
+                    assertEquals(v1.label(), detachedEdge.outVertex().label());
+                    assertEquals(e.label(), detachedEdge.label());
+                    assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
+                    assertEquals(0.5d, detachedEdge.value("weight"), 0.000001d);                      // lossy
 
-                            calledEdge.set(true);
-                            return null;
-                        });
+                    calledEdge.set(true);
+                    return null;
+                }, Direction.OUT);
             }
 
             assertTrue(calledVertex.get());
@@ -1423,43 +1467,33 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
     @FeatureRequirement(featureClass = VertexPropertyFeatures.class, feature = FEATURE_STRING_VALUES)
     @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_DOUBLE_VALUES)
-    public void shouldReadWriteVertexWithININEdgesToGryo() throws Exception {
+    public void shouldReadWriteVertexWithINEdgesToGryo() throws Exception {
         final Vertex v1 = graph.addVertex("name", "marko", T.label, "person");
 
         final Vertex v2 = graph.addVertex(T.label, "person");
         final Edge e = v2.addEdge("friends", v1, "weight", 0.5d);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
+            final GryoWriter writer = graph.io(gryo).writer().create();
             writer.writeVertex(os, v1, Direction.IN);
 
             final AtomicBoolean calledVertex = new AtomicBoolean(false);
             final AtomicBoolean calledEdge = new AtomicBoolean(false);
 
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
+            final GryoReader reader = graph.io(gryo).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, Direction.IN, detachedVertex -> {
-                    assertEquals(v1.id(), detachedVertex.id());
-                    assertEquals(v1.label(), detachedVertex.label());
-                    assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
-                    assertEquals(v1.value("name"), detachedVertex.value("name").toString());
+                reader.readVertex(bais, attachable -> {
+                    final Vertex detachedVertex = attachable.get();
+                    TestHelper.validateVertexEquality(v1, detachedVertex, true);
                     calledVertex.set(true);
-
                     return detachedVertex;
-                }, detachedEdge -> {
-                    assertEquals(e.id(), detachedEdge.id());
-                    assertEquals(v2.id(), detachedEdge.outVertex().id());
-                    assertEquals(v1.id(), detachedEdge.inVertex().id());
-                    assertEquals(v1.label(), detachedEdge.outVertex().label());
-                    assertEquals(v2.label(), detachedEdge.inVertex().label());
-                    assertEquals(e.label(), detachedEdge.label());
-                    assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
-                    assertEquals(0.5d, detachedEdge.value("weight"), 0.00001d);
-
+                }, attachable -> {
+                    final Edge detachedEdge = attachable.get();
+                    TestHelper.validateEdgeEquality(e, detachedEdge);
                     calledEdge.set(true);
 
                     return detachedEdge;
-                });
+                }, Direction.IN);
             }
 
             assertTrue(calledVertex.get());
@@ -1473,33 +1507,33 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = VertexPropertyFeatures.class, feature = FEATURE_STRING_VALUES)
     @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_FLOAT_VALUES)
     @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_DOUBLE_VALUES)
-    public void shouldReadWriteVertexWithININEdgesToGraphSON() throws Exception {
+    public void shouldReadWriteVertexWithINEdgesToGraphSON() throws Exception {
         final Vertex v1 = graph.addVertex("name", "marko", T.label, "person");
         final Vertex v2 = graph.addVertex(T.label, "person");
         final Edge e = v2.addEdge("friends", v1, "weight", 0.5f);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().create();
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
             writer.writeVertex(os, v1, Direction.IN);
             os.close();
 
             final AtomicBoolean calledVertex = new AtomicBoolean(false);
             final AtomicBoolean calledEdge = new AtomicBoolean(false);
-            final GraphSONReader reader = graph.io().graphSONReader().create();
+            final GraphSONReader reader = graph.io(graphson).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, Direction.IN, detachedVertex -> {
+                reader.readVertex(bais, attachable -> {
+                            final Vertex detachedVertex = attachable.get();
                             assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
                             assertEquals(v1.label(), detachedVertex.label());
                             assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
                             assertEquals("marko", detachedVertex.value("name"));
                             calledVertex.set(true);
                             return null;
-                        },
-                        detachedEdge -> {
+                        },attachable -> {
+                            final Edge detachedEdge = attachable.get();
                             assertEquals(e.id(), graph.edges(detachedEdge.id().toString()).next().id());
                             assertEquals(v1.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
                             assertEquals(v2.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
-                            assertEquals(v1.label(), detachedEdge.outVertex().label());
                             assertEquals(v2.label(), detachedEdge.inVertex().label());
                             assertEquals(e.label(), detachedEdge.label());
                             assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
@@ -1507,7 +1541,7 @@ public class IoTest extends AbstractGremlinTest {
 
                             calledEdge.set(true);
                             return null;
-                        });
+                        }, Direction.IN);
             }
 
             assertTrue(calledVertex.get());
@@ -1520,7 +1554,7 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
     @FeatureRequirement(featureClass = VertexPropertyFeatures.class, feature = FEATURE_STRING_VALUES)
     @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_DOUBLE_VALUES)
-    public void shouldReadWriteVertexWithBOTHBOTHEdgesToGryo() throws Exception {
+    public void shouldReadWriteVertexWithBOTHEdgesToGryo() throws Exception {
         final Vertex v1 = graph.addVertex("name", "marko", T.label, "person");
 
         final Vertex v2 = graph.addVertex(T.label, "person");
@@ -1528,49 +1562,34 @@ public class IoTest extends AbstractGremlinTest {
         final Edge e2 = v1.addEdge("friends", v2, "weight", 1.0d);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
+            final GryoWriter writer = graph.io(gryo).writer().create();
             writer.writeVertex(os, v1, Direction.BOTH);
 
             final AtomicBoolean calledVertex = new AtomicBoolean(false);
             final AtomicBoolean calledEdge1 = new AtomicBoolean(false);
             final AtomicBoolean calledEdge2 = new AtomicBoolean(false);
 
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
+            final GryoReader reader = graph.io(gryo).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, Direction.BOTH, detachedVertex -> {
-                            assertEquals(v1.id(), detachedVertex.id());
-                            assertEquals(v1.label(), detachedVertex.label());
-                            assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
-                            assertEquals(v1.value("name"), detachedVertex.value("name").toString());
+                reader.readVertex(bais, attachable -> {
+                            final Vertex detachedVertex = attachable.get();
+                            TestHelper.validateVertexEquality(v1, detachedVertex, true);
                             calledVertex.set(true);
-
                             return detachedVertex;
-                        },
-                        detachedEdge -> {
+                        },attachable -> {
+                            final Edge detachedEdge = attachable.get();
                             if (detachedEdge.id().equals(e1.id())) {
-                                assertEquals(v2.id(), detachedEdge.outVertex().id());
-                                assertEquals(v1.id(), detachedEdge.inVertex().id());
-                                assertEquals(v1.label(), detachedEdge.outVertex().label());
-                                assertEquals(v2.label(), detachedEdge.inVertex().label());
-                                assertEquals(e1.label(), detachedEdge.label());
-                                assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
-                                assertEquals(0.5d, detachedEdge.value("weight"), 0.00001d);
+                                TestHelper.validateEdgeEquality(e1, detachedEdge);
                                 calledEdge1.set(true);
                             } else if (detachedEdge.id().equals(e2.id())) {
-                                assertEquals(v1.id(), detachedEdge.outVertex().id());
-                                assertEquals(v2.id(), detachedEdge.inVertex().id());
-                                assertEquals(v1.label(), detachedEdge.outVertex().label());
-                                assertEquals(v2.label(), detachedEdge.inVertex().label());
-                                assertEquals(e1.label(), detachedEdge.label());
-                                assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
-                                assertEquals(1.0d, detachedEdge.value("weight"), 0.00001d);
+                                TestHelper.validateEdgeEquality(e2, detachedEdge);
                                 calledEdge2.set(true);
                             } else {
                                 fail("An edge id generated that does not exist");
                             }
 
                             return null;
-                        });
+                        }, Direction.BOTH);
             }
 
             assertTrue(calledVertex.get());
@@ -1585,36 +1604,36 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = VertexPropertyFeatures.class, feature = FEATURE_STRING_VALUES)
     @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_FLOAT_VALUES)
     @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_DOUBLE_VALUES)
-    public void shouldReadWriteVertexWithBOTHBOTHEdgesToGraphSON() throws Exception {
+    public void shouldReadWriteVertexWithBOTHEdgesToGraphSON() throws Exception {
         final Vertex v1 = graph.addVertex("name", "marko", T.label, "person");
         final Vertex v2 = graph.addVertex(T.label, "person");
         final Edge e1 = v2.addEdge("friends", v1, "weight", 0.5f);
         final Edge e2 = v1.addEdge("friends", v2, "weight", 1.0f);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().create();
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
             writer.writeVertex(os, v1, Direction.BOTH);
 
             final AtomicBoolean vertexCalled = new AtomicBoolean(false);
             final AtomicBoolean edge1Called = new AtomicBoolean(false);
             final AtomicBoolean edge2Called = new AtomicBoolean(false);
 
-            final GraphSONReader reader = graph.io().graphSONReader().create();
+            final GraphSONReader reader = graph.io(graphson).reader().create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, Direction.BOTH, detachedVertex -> {
+                reader.readVertex(bais, attachable -> {
+                            final Vertex detachedVertex = attachable.get();
                             assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
                             assertEquals(v1.label(), detachedVertex.label());
                             assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
                             assertEquals("marko", detachedVertex.value("name"));
                             vertexCalled.set(true);
                             return null;
-                        },
-                        detachedEdge -> {
+                        },attachable -> {
+                            final Edge detachedEdge = attachable.get();
                             if (graph.edges(detachedEdge.id().toString()).next().id().equals(e1.id())) {
                                 assertEquals(e1.id(), graph.edges(detachedEdge.id().toString()).next().id());
                                 assertEquals(v1.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
                                 assertEquals(v2.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
-                                assertEquals(v1.label(), detachedEdge.outVertex().label());
                                 assertEquals(v2.label(), detachedEdge.inVertex().label());
                                 assertEquals(e1.label(), detachedEdge.label());
                                 assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
@@ -1625,7 +1644,6 @@ public class IoTest extends AbstractGremlinTest {
                                 assertEquals(v2.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
                                 assertEquals(v1.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
                                 assertEquals(v1.label(), detachedEdge.outVertex().label());
-                                assertEquals(v2.label(), detachedEdge.inVertex().label());
                                 assertEquals(e2.label(), detachedEdge.label());
                                 assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
                                 assertEquals(1.0d, detachedEdge.value("weight"), 0.000001d);                      // lossy
@@ -1635,12 +1653,10 @@ public class IoTest extends AbstractGremlinTest {
                             }
 
                             return null;
-                        });
+                        }, Direction.BOTH);
             }
 
             assertTrue(vertexCalled.get());
-            assertTrue(edge1Called.get());
-            assertTrue(edge2Called.get());
         }
     }
 
@@ -1650,23 +1666,24 @@ public class IoTest extends AbstractGremlinTest {
     @FeatureRequirement(featureClass = VertexPropertyFeatures.class, feature = FEATURE_STRING_VALUES)
     @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_FLOAT_VALUES)
     @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_DOUBLE_VALUES)
-    public void shouldReadWriteVertexWithBOTHBOTHEdgesToGraphSONWithTypes() throws Exception {
+    public void shouldReadWriteVertexWithBOTHEdgesToGraphSONWithTypes() throws Exception {
         final Vertex v1 = graph.addVertex("name", "marko", T.label, "person");
         final Vertex v2 = graph.addVertex(T.label, "person");
         final Edge e1 = v2.addEdge("friends", v1, "weight", 0.5f);
         final Edge e2 = v1.addEdge("friends", v2, "weight", 1.0f);
 
         try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().mapper(graph.io().graphSONMapper().embedTypes(true).create()).create();
+            final GraphSONWriter writer = graph.io(graphson).writer().mapper(graph.io(graphson).mapper().embedTypes(true).create()).create();
             writer.writeVertex(os, v1, Direction.BOTH);
 
             final AtomicBoolean vertexCalled = new AtomicBoolean(false);
             final AtomicBoolean edge1Called = new AtomicBoolean(false);
             final AtomicBoolean edge2Called = new AtomicBoolean(false);
 
-            final GraphSONReader reader = graph.io().graphSONReader().mapper(graph.io().graphSONMapper().embedTypes(true).create()).create();
+            final GraphSONReader reader = graph.io(graphson).reader().mapper(graph.io(graphson).mapper().embedTypes(true).create()).create();
             try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, Direction.BOTH, detachedVertex -> {
+                reader.readVertex(bais, attachable -> {
+                    final Vertex detachedVertex = attachable.get();
                     // a quick reminder here that the purpose of these id assertions is to ensure that those with
                     // complex ids that are not simply toString'd (i.e. are complex objects in JSON as well)
                     // properly respond to filtering in Graph.edges/vertices
@@ -1676,14 +1693,14 @@ public class IoTest extends AbstractGremlinTest {
                     assertEquals(v1.value("name"), detachedVertex.value("name").toString());
                     vertexCalled.set(true);
                     return null;
-                }, detachedEdge -> {
+                }, attachable -> {
+                    final Edge detachedEdge = attachable.get();
                     // a quick reminder here that the purpose of these id assertions is to ensure that those with
                     // complex ids that are not simply toString'd (i.e. are complex objects in JSON as well)
                     // properly respond to filtering in Graph.edges/vertices
                     if (graph.edges(detachedEdge.id()).next().id().equals(e1.id())) {
                         assertEquals(v2.id(), graph.vertices(detachedEdge.outVertex().id()).next().id());
                         assertEquals(v1.id(), graph.vertices(detachedEdge.inVertex().id()).next().id());
-                        assertEquals(v1.label(), detachedEdge.outVertex().label());
                         assertEquals(v2.label(), detachedEdge.inVertex().label());
                         assertEquals(e1.label(), detachedEdge.label());
                         assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
@@ -1693,7 +1710,6 @@ public class IoTest extends AbstractGremlinTest {
                         assertEquals(v1.id(), graph.vertices(detachedEdge.outVertex().id()).next().id());
                         assertEquals(v2.id(), graph.vertices(detachedEdge.inVertex().id()).next().id());
                         assertEquals(v1.label(), detachedEdge.outVertex().label());
-                        assertEquals(v2.label(), detachedEdge.inVertex().label());
                         assertEquals(e1.label(), detachedEdge.label());
                         assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
                         assertEquals(1.0f, detachedEdge.value("weight"), 0.00001f);
@@ -1703,320 +1719,12 @@ public class IoTest extends AbstractGremlinTest {
                     }
 
                     return null;
-                });
+                }, Direction.BOTH);
             }
 
             assertTrue(vertexCalled.get());
             assertTrue(edge1Called.get());
             assertTrue(edge2Called.get());
-        }
-    }
-
-    @Test
-    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
-    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
-    @FeatureRequirement(featureClass = VertexPropertyFeatures.class, feature = FEATURE_STRING_VALUES)
-    @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_DOUBLE_VALUES)
-    public void shouldReadWriteVertexWithBOTHINEdgesToGryo() throws Exception {
-        final Vertex v1 = graph.addVertex("name", "marko", T.label, "person");
-
-        final Vertex v2 = graph.addVertex(T.label, "person");
-        final Edge e1 = v2.addEdge("friends", v1, "weight", 0.5d);
-        v1.addEdge("friends", v2, "weight", 1.0d);
-
-        try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
-            writer.writeVertex(os, v1, Direction.BOTH);
-
-            final AtomicBoolean vertexCalled = new AtomicBoolean(false);
-            final AtomicBoolean edge1Called = new AtomicBoolean(false);
-
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
-            try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, Direction.IN, detachedVertex -> {
-                            assertEquals(v1.id(), detachedVertex.id());
-                            assertEquals(v1.label(), detachedVertex.label());
-                            assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
-                            assertEquals(v1.value("name"), detachedVertex.value("name").toString());
-                            vertexCalled.set(true);
-
-                            return detachedVertex;
-                        },
-                        detachedEdge -> {
-                            if (detachedEdge.id().equals(e1.id())) {
-                                assertEquals(v2.id(), detachedEdge.outVertex().id());
-                                assertEquals(v1.id(), detachedEdge.inVertex().id());
-                                assertEquals(v1.label(), detachedEdge.outVertex().label());
-                                assertEquals(v2.label(), detachedEdge.inVertex().label());
-                                assertEquals(e1.label(), detachedEdge.label());
-                                assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
-                                assertEquals(0.5d, detachedEdge.value("weight"), 0.00001d);
-                                edge1Called.set(true);
-                            } else {
-                                fail("An edge id generated that does not exist");
-                            }
-
-                            return null;
-                        });
-            }
-
-            assertTrue(vertexCalled.get());
-            assertTrue(edge1Called.get());
-        }
-    }
-
-    @Test
-    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
-    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
-    @FeatureRequirement(featureClass = VertexPropertyFeatures.class, feature = FEATURE_STRING_VALUES)
-    @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_FLOAT_VALUES)
-    @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_DOUBLE_VALUES)
-    public void shouldReadWriteVertexWithBOTHINEdgesToGraphSON() throws Exception {
-        final Vertex v1 = graph.addVertex("name", "marko", T.label, "person");
-        final Vertex v2 = graph.addVertex(T.label, "person");
-        final Edge e1 = v2.addEdge("friends", v1, "weight", 0.5f);
-        v1.addEdge("friends", v2, "weight", 1.0f);
-
-        try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().create();
-            writer.writeVertex(os, v1, Direction.BOTH);
-
-            final AtomicBoolean vertexCalled = new AtomicBoolean(false);
-            final AtomicBoolean edgeCalled = new AtomicBoolean(false);
-
-            final GraphSONReader reader = graph.io().graphSONReader().create();
-            try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, Direction.IN, detachedVertex -> {
-                    assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
-                    assertEquals(v1.label(), detachedVertex.label());
-                    assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
-                    assertEquals("marko", detachedVertex.value("name"));
-                    vertexCalled.set(true);
-
-                    return null;
-                }, detachedEdge -> {
-                    if (graph.edges(detachedEdge.id().toString()).next().id().equals(e1.id())) {
-                        assertEquals(e1.id(), graph.edges(detachedEdge.id().toString()).next().id());
-                        assertEquals(v1.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
-                        assertEquals(v2.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
-                        assertEquals(v1.label(), detachedEdge.outVertex().label());
-                        assertEquals(v2.label(), detachedEdge.inVertex().label());
-                        assertEquals(e1.label(), detachedEdge.label());
-                        assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
-                        assertEquals(0.5d, detachedEdge.value("weight"), 0.000001d);                      // lossy
-                        edgeCalled.set(true);
-                    } else {
-                        fail("An edge id generated that does not exist");
-                    }
-
-                    return null;
-                });
-            }
-
-            assertTrue(edgeCalled.get());
-            assertTrue(vertexCalled.get());
-        }
-    }
-
-    @Test
-    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
-    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
-    @FeatureRequirement(featureClass = VertexPropertyFeatures.class, feature = FEATURE_STRING_VALUES)
-    @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_DOUBLE_VALUES)
-    public void shouldReadWriteVertexWithBOTHOUTEdgesToGryo() throws Exception {
-        final Vertex v1 = graph.addVertex("name", "marko", T.label, "person");
-
-        final Vertex v2 = graph.addVertex(T.label, "person");
-        v2.addEdge("friends", v1, "weight", 0.5d);
-        final Edge e2 = v1.addEdge("friends", v2, "weight", 1.0d);
-
-        try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
-            writer.writeVertex(os, v1, Direction.BOTH);
-
-            final AtomicBoolean vertexCalled = new AtomicBoolean(false);
-            final AtomicBoolean edgeCalled = new AtomicBoolean(false);
-
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
-            try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, Direction.OUT, detachedVertex -> {
-                            assertEquals(v1.id(), detachedVertex.id());
-                            assertEquals(v1.label(), detachedVertex.label());
-                            assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
-                            assertEquals(v1.value("name"), detachedVertex.value("name").toString());
-                            vertexCalled.set(true);
-
-                            return detachedVertex;
-                        },
-                        detachedEdge -> {
-                            if (detachedEdge.id().equals(e2.id())) {
-                                assertEquals(v1.id(), detachedEdge.outVertex().id());
-                                assertEquals(v2.id(), detachedEdge.inVertex().id());
-                                assertEquals(v1.label(), detachedEdge.outVertex().label());
-                                assertEquals(v2.label(), detachedEdge.inVertex().label());
-                                assertEquals(e2.label(), detachedEdge.label());
-                                assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
-                                assertEquals(1.0d, detachedEdge.value("weight"), 0.00001d);
-
-                                edgeCalled.set(true);
-                            } else {
-                                fail("An edge id generated that does not exist");
-                            }
-
-                            return null;
-                        });
-            }
-
-            assertTrue(vertexCalled.get());
-            assertTrue(edgeCalled.get());
-        }
-    }
-
-    @Test
-    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
-    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
-    @FeatureRequirement(featureClass = VertexPropertyFeatures.class, feature = FEATURE_STRING_VALUES)
-    @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_FLOAT_VALUES)
-    @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_DOUBLE_VALUES)
-    public void shouldReadWriteVertexWithBOTHOUTEdgesToGraphSON() throws Exception {
-        final Vertex v1 = graph.addVertex("name", "marko", T.label, "person");
-        final Vertex v2 = graph.addVertex(T.label, "person");
-        v2.addEdge("friends", v1, "weight", 0.5f);
-        final Edge e2 = v1.addEdge("friends", v2, "weight", 1.0f);
-
-        try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GraphSONWriter writer = graph.io().graphSONWriter().create();
-            writer.writeVertex(os, v1, Direction.BOTH);
-
-            final AtomicBoolean vertexCalled = new AtomicBoolean(false);
-            final AtomicBoolean edgeCalled = new AtomicBoolean(false);
-
-            final GraphSONReader reader = graph.io().graphSONReader().create();
-            try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais, Direction.OUT, detachedVertex -> {
-                    assertEquals(v1.id(), graph.vertices(detachedVertex.id().toString()).next().id());
-                    assertEquals(v1.label(), detachedVertex.label());
-                    assertEquals(1, IteratorUtils.count(detachedVertex.properties()));
-                    assertEquals("marko", detachedVertex.value("name"));
-                    vertexCalled.set(true);
-                    return null;
-                }, detachedEdge -> {
-                    if (graph.edges(detachedEdge.id().toString()).next().id().equals(e2.id())) {
-                        assertEquals(e2.id(), graph.edges(detachedEdge.id().toString()).next().id());
-                        assertEquals(v2.id(), graph.vertices(detachedEdge.inVertex().id().toString()).next().id());
-                        assertEquals(v1.id(), graph.vertices(detachedEdge.outVertex().id().toString()).next().id());
-                        assertEquals(v1.label(), detachedEdge.outVertex().label());
-                        assertEquals(v2.label(), detachedEdge.inVertex().label());
-                        assertEquals(e2.label(), detachedEdge.label());
-                        assertEquals(1, IteratorUtils.count(detachedEdge.properties()));
-                        assertEquals(1.0d, detachedEdge.value("weight"), 0.000001d);                      // lossy
-                        edgeCalled.set(true);
-                    } else {
-                        fail("An edge id generated that does not exist");
-                    }
-
-                    return null;
-                });
-            }
-
-            assertTrue(edgeCalled.get());
-            assertTrue(vertexCalled.get());
-        }
-    }
-
-    @Test(expected = IllegalStateException.class)
-    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
-    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
-    @FeatureRequirement(featureClass = VertexPropertyFeatures.class, feature = FEATURE_STRING_VALUES)
-    @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_DOUBLE_VALUES)
-    public void shouldReadWriteVertexWithOUTBOTHEdgesToGryo() throws Exception {
-        final Vertex v1 = graph.addVertex("name", "marko");
-        final Vertex v2 = graph.addVertex();
-        v1.addEdge("friends", v2, "weight", 0.5d);
-
-        try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
-            writer.writeVertex(os, v1, Direction.OUT);
-
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
-            try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais,
-                        Direction.BOTH,
-                        detachedVertex -> null,
-                        detachedEdge -> null);
-            }
-        }
-    }
-
-    @Test(expected = IllegalStateException.class)
-    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
-    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
-    @FeatureRequirement(featureClass = VertexPropertyFeatures.class, feature = FEATURE_STRING_VALUES)
-    @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_DOUBLE_VALUES)
-    public void shouldReadWriteVertexWithINBOTHEdgesToGryo() throws Exception {
-        final Vertex v1 = graph.addVertex("name", "marko");
-        final Vertex v2 = graph.addVertex();
-        v2.addEdge("friends", v1, "weight", 0.5d);
-
-        try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
-            writer.writeVertex(os, v1, Direction.IN);
-
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
-            try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais,
-                        Direction.BOTH,
-                        detachedVertex -> null,
-                        detachedEdge -> null);
-            }
-        }
-    }
-
-    @Test(expected = IllegalStateException.class)
-    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
-    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
-    @FeatureRequirement(featureClass = VertexPropertyFeatures.class, feature = FEATURE_STRING_VALUES)
-    @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_DOUBLE_VALUES)
-    public void shouldReadWriteVertexWithINOUTEdgesToGryo() throws Exception {
-        final Vertex v1 = graph.addVertex("name", "marko");
-        final Vertex v2 = graph.addVertex();
-        v2.addEdge("friends", v1, "weight", 0.5d);
-
-        try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
-            writer.writeVertex(os, v1, Direction.IN);
-
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
-            try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais,
-                        Direction.OUT,
-                        detachedVertex -> null,
-                        detachedEdge -> null);
-            }
-        }
-    }
-
-    @Test(expected = IllegalStateException.class)
-    @FeatureRequirement(featureClass = Graph.Features.EdgeFeatures.class, feature = Graph.Features.EdgeFeatures.FEATURE_ADD_EDGES)
-    @FeatureRequirement(featureClass = Graph.Features.VertexFeatures.class, feature = Graph.Features.VertexFeatures.FEATURE_ADD_VERTICES)
-    @FeatureRequirement(featureClass = VertexPropertyFeatures.class, feature = FEATURE_STRING_VALUES)
-    @FeatureRequirement(featureClass = EdgePropertyFeatures.class, feature = EdgePropertyFeatures.FEATURE_DOUBLE_VALUES)
-    public void shouldReadWriteVertexWithOUTINEdgesToGryo() throws Exception {
-        final Vertex v1 = graph.addVertex("name", "marko");
-        final Vertex v2 = graph.addVertex();
-        v1.addEdge("friends", v2, "weight", 0.5d);
-
-        try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
-            final GryoWriter writer = graph.io().gryoWriter().create();
-            writer.writeVertex(os, v1, Direction.IN);
-
-            final GryoReader reader = graph.io().gryoReader().workingDirectory(tempPath).create();
-            try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
-                reader.readVertex(bais,
-                        Direction.OUT,
-                        detachedVertex -> null,
-                        detachedEdge -> null);
-            }
         }
     }
 
@@ -2036,13 +1744,155 @@ public class IoTest extends AbstractGremlinTest {
         assertClassicGraph(graph, false, true);
     }
 
+    @Test
+    @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
+    public void shouldReadWritePropertyGraphSON() throws Exception {
+        try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
+            final Property p = g.E(convertToEdgeId("marko", "knows", "vadas")).next().property("weight");
+            writer.writeProperty(os, p);
+
+            final AtomicBoolean called = new AtomicBoolean(false);
+            final GraphSONReader reader = graph.io(graphson).reader().create();
+            try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
+                reader.readProperty(bais, propertyAttachable -> {
+                    assertEquals(p.value(), propertyAttachable.get().value());
+                    assertEquals(p.key(), propertyAttachable.get().key());
+                    called.set(true);
+                    return propertyAttachable.get();
+                });
+            }
+
+            assertTrue(called.get());
+        }
+    }
+
+    @Test
+    @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
+    public void shouldReadWriteVertexPropertyNoMetaPropertiesGraphSON() throws Exception {
+        try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
+            final VertexProperty p = g.V(convertToVertexId("marko")).next().property("name");
+            writer.writeVertexProperty(os, p);
+
+            final AtomicBoolean called = new AtomicBoolean(false);
+            final GraphSONReader reader = graph.io(graphson).reader().create();
+            try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
+                reader.readVertexProperty(bais, propertyAttachable -> {
+                    assertEquals(p.value(), propertyAttachable.get().value());
+                    assertEquals(p.key(), propertyAttachable.get().key());
+                    assertEquals(0, IteratorUtils.count(propertyAttachable.get().properties()));
+                    called.set(true);
+                    return propertyAttachable.get();
+                });
+            }
+
+            assertTrue(called.get());
+        }
+    }
+
+    @Test
+    @LoadGraphWith(LoadGraphWith.GraphData.CREW)
+    public void shouldReadWriteVertexPropertyWithMetaPropertiesGraphSON() throws Exception {
+        try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
+            final GraphSONWriter writer = graph.io(graphson).writer().create();
+            final VertexProperty p = g.V(convertToVertexId("marko")).next().properties("location").next();
+            writer.writeVertexProperty(os, p);
+
+            final AtomicBoolean called = new AtomicBoolean(false);
+            final GraphSONReader reader = graph.io(graphson).reader().create();
+            try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
+                reader.readVertexProperty(bais, propertyAttachable -> {
+                    assertEquals(p.value(), propertyAttachable.get().value());
+                    assertEquals(p.key(), propertyAttachable.get().key());
+                    assertEquals(IteratorUtils.count(p.properties()), IteratorUtils.count(propertyAttachable.get().properties()));
+                    assertEquals(p.property("startTime").value(), ((Property) propertyAttachable.get().properties("startTime").next()).value());
+                    assertEquals(p.property("endTime").value(), ((Property) propertyAttachable.get().properties("endTime").next()).value());
+                    called.set(true);
+                    return propertyAttachable.get();
+                });
+            }
+
+            assertTrue(called.get());
+        }
+    }
+
+    @Test
+    @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
+    public void shouldReadWritePropertyGryo() throws Exception {
+        try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
+            final GryoWriter writer = graph.io(gryo).writer().create();
+            final Property p = g.E(convertToEdgeId("marko", "knows", "vadas")).next().property("weight");
+            writer.writeProperty(os, p);
+
+            final AtomicBoolean called = new AtomicBoolean(false);
+            final GryoReader reader = graph.io(gryo).reader().create();
+            try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
+                reader.readProperty(bais, propertyAttachable -> {
+                    assertEquals(p.value(), propertyAttachable.get().value());
+                    assertEquals(p.key(), propertyAttachable.get().key());
+                    called.set(true);
+                    return propertyAttachable.get();
+                });
+            }
+
+            assertTrue(called.get());
+        }
+    }
+
+    @Test
+    @LoadGraphWith(LoadGraphWith.GraphData.MODERN)
+    public void shouldReadWriteVertexPropertyNoMetaPropertiesGryo() throws Exception {
+        try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
+            final GryoWriter writer = graph.io(gryo).writer().create();
+            final VertexProperty p = g.V(convertToVertexId("marko")).next().property("name");
+            writer.writeVertexProperty(os, p);
+
+            final AtomicBoolean called = new AtomicBoolean(false);
+            final GryoReader reader = graph.io(gryo).reader().create();
+            try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
+                reader.readVertexProperty(bais, propertyAttachable -> {
+                    assertEquals(p.value(), propertyAttachable.get().value());
+                    assertEquals(p.key(), propertyAttachable.get().key());
+                    assertEquals(0, IteratorUtils.count(propertyAttachable.get().properties()));
+                    called.set(true);
+                    return propertyAttachable.get();
+                });
+            }
+
+            assertTrue(called.get());
+        }
+    }
+
+    @Test
+    @LoadGraphWith(LoadGraphWith.GraphData.CREW)
+    public void shouldReadWriteVertexPropertyWithMetaPropertiesGryo() throws Exception {
+        try (final ByteArrayOutputStream os = new ByteArrayOutputStream()) {
+            final GryoWriter writer = graph.io(gryo).writer().create();
+            final VertexProperty p = g.V(convertToVertexId("marko")).next().properties("location").next();
+            writer.writeVertexProperty(os, p);
+
+            final AtomicBoolean called = new AtomicBoolean(false);
+            final GryoReader reader = graph.io(gryo).reader().create();
+            try (final ByteArrayInputStream bais = new ByteArrayInputStream(os.toByteArray())) {
+                reader.readVertexProperty(bais, propertyAttachable -> {
+                    assertEquals(p.value(), propertyAttachable.get().value());
+                    assertEquals(p.key(), propertyAttachable.get().key());
+                    assertEquals(IteratorUtils.count(p.properties()), IteratorUtils.count(propertyAttachable.get().properties()));
+                    assertEquals(p.property("startTime").value(), ((Property) propertyAttachable.get().properties("startTime").next()).value());
+                    assertEquals(p.property("endTime").value(), ((Property) propertyAttachable.get().properties("endTime").next()).value());
+                    called.set(true);
+                    return propertyAttachable.get();
+                });
+            }
+
+            assertTrue(called.get());
+        }
+    }
+
     public static void assertCrewGraph(final Graph g1, final boolean lossyForId) {
         assertEquals(new Long(6), g1.traversal().V().count().next());
         assertEquals(new Long(14), g1.traversal().E().count().next());
-
-        assertEquals("marko", g1.variables().get("creator").get().toString());
-        assertEquals(2014, g1.variables().get("lastModified").get());
-        assertEquals("this graph was created to provide examples and test coverage for tinkerpop3 api advances", g1.variables().get("comment").get().toString());
 
         final Vertex v1 = (Vertex) g1.traversal().V().has("name", "marko").next();
         assertEquals("person", v1.label());

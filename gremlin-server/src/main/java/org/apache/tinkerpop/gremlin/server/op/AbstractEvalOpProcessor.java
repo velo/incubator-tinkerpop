@@ -25,7 +25,7 @@ import org.apache.tinkerpop.gremlin.driver.message.RequestMessage;
 import org.apache.tinkerpop.gremlin.driver.message.ResponseMessage;
 import org.apache.tinkerpop.gremlin.driver.message.ResponseStatusCode;
 import org.apache.tinkerpop.gremlin.groovy.engine.GremlinExecutor;
-import org.apache.tinkerpop.gremlin.process.traversal.T;
+import org.apache.tinkerpop.gremlin.structure.T;
 import org.apache.tinkerpop.gremlin.server.Context;
 import org.apache.tinkerpop.gremlin.server.GremlinServer;
 import org.apache.tinkerpop.gremlin.server.OpProcessor;
@@ -47,6 +47,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
@@ -153,11 +154,11 @@ public abstract class AbstractEvalOpProcessor implements OpProcessor {
         final CompletableFuture<Void> iterationFuture = evalFuture.thenAcceptAsync(o -> {
             final Iterator itty = IteratorUtils.asIterator(o);
 
-            logger.info("Preparing to iterate results from - {} - in thread [{}]", msg, Thread.currentThread().getName());
+            logger.debug("Preparing to iterate results from - {} - in thread [{}]", msg, Thread.currentThread().getName());
 
             try {
                 handleIterator(context, itty);
-            } catch (TimeoutException te) {
+            } catch (Exception te) {
                 throw new RuntimeException(te);
             }
         }, executor);
@@ -193,33 +194,57 @@ public abstract class AbstractEvalOpProcessor implements OpProcessor {
      * @param itty The result to iterator
      * @throws TimeoutException if the time taken to serialize the entire result set exceeds the allowable time.
      */
-    protected void handleIterator(final Context context, final Iterator itty) throws TimeoutException {
+    protected void handleIterator(final Context context, final Iterator itty) throws TimeoutException, InterruptedException {
         final ChannelHandlerContext ctx = context.getChannelHandlerContext();
         final RequestMessage msg = context.getRequestMessage();
         final Settings settings = context.getSettings();
+        boolean warnOnce = false;
 
         // timer for the total serialization time
         final StopWatch stopWatch = new StopWatch();
         stopWatch.start();
 
         // the batch size can be overridden by the request
-        final int resultIterationBatchSize = (Integer) msg.optionalArgs(Tokens.ARGS_BATCH_SIZE).orElse(settings.resultIterationBatchSize);
+        final int resultIterationBatchSize = (Integer) msg.optionalArgs(Tokens.ARGS_BATCH_SIZE)
+                .orElse(settings.resultIterationBatchSize);
         List<Object> aggregate = new ArrayList<>(resultIterationBatchSize);
         while (itty.hasNext()) {
-            aggregate.add(itty.next());
+            if (Thread.interrupted()) throw new InterruptedException();
 
-            // send back a page of results if batch size is met or if it's the end of the results being
-            // iterated
-            if (aggregate.size() == resultIterationBatchSize || !itty.hasNext()) {
-                ctx.writeAndFlush(ResponseMessage.build(msg)
-                        .code(ResponseStatusCode.SUCCESS)
-                        .result(aggregate).create());
-                aggregate = new ArrayList<>(resultIterationBatchSize);
+            // have to check the aggregate size because it is possible that the channel is not writeable (below)
+            // so iterating next() if the message is not written and flushed would bump the aggregate size beyond
+            // the expected resultIterationBatchSize.  Total serialization time for the response remains in
+            // effect so if the client is "slow" it may simply timeout.
+            if (aggregate.size() < resultIterationBatchSize) aggregate.add(itty.next());
+
+            // send back a page of results if batch size is met or if it's the end of the results being iterated.
+            // also check writeability of the channel to prevent OOME for slow clients.
+            if (ctx.channel().isWritable()) {
+                if  (aggregate.size() == resultIterationBatchSize || !itty.hasNext()) {
+                    ctx.writeAndFlush(ResponseMessage.build(msg)
+                            .code(ResponseStatusCode.SUCCESS)
+                            .result(aggregate).create());
+
+                    aggregate = new ArrayList<>(resultIterationBatchSize);
+                }
+            } else {
+                // don't keep triggering this warning over and over again for the same request
+                if (!warnOnce) {
+                    logger.warn("Pausing response writing as writeBufferHighWaterMark exceeded on {} - writing will continue once client has caught up", msg);
+                    warnOnce = true;
+                }
+
+                // since the client is lagging we can hold here for a period of time for the client to catch up.
+                // this isn't blocking the IO thread - just a worker.
+                TimeUnit.MILLISECONDS.sleep(10);
             }
 
             stopWatch.split();
-            if (stopWatch.getSplitTime() > settings.serializedResponseTimeout)
-                throw new TimeoutException("Serialization of the entire response exceeded the serializeResponseTimeout setting");
+            if (stopWatch.getSplitTime() > settings.serializedResponseTimeout) {
+                final String timeoutMsg = String.format("Serialization of the entire response exceeded the serializeResponseTimeout setting %s",
+                        warnOnce ? "[Gremlin Server paused writes to client as messages were not being consumed quickly enough]" : "");
+                throw new TimeoutException(timeoutMsg.trim());
+            }
 
             stopWatch.unsplit();
         }

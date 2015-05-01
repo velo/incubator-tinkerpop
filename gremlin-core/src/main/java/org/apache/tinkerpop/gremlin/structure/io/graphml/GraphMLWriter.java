@@ -18,13 +18,15 @@
  */
 package org.apache.tinkerpop.gremlin.structure.io.graphml;
 
-import org.apache.tinkerpop.gremlin.process.traversal.Traversal;
 import org.apache.tinkerpop.gremlin.structure.Direction;
 import org.apache.tinkerpop.gremlin.structure.Edge;
 import org.apache.tinkerpop.gremlin.structure.Element;
 import org.apache.tinkerpop.gremlin.structure.Graph;
+import org.apache.tinkerpop.gremlin.structure.Property;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
+import org.apache.tinkerpop.gremlin.structure.VertexProperty;
 import org.apache.tinkerpop.gremlin.structure.io.GraphWriter;
+import org.apache.tinkerpop.gremlin.structure.io.Io;
 import org.apache.tinkerpop.gremlin.structure.util.Comparators;
 import org.apache.tinkerpop.gremlin.util.iterator.IteratorUtils;
 
@@ -75,29 +77,84 @@ public class GraphMLWriter implements GraphWriter {
         this.vertexLabelKey = vertexLabelKey;
     }
 
+    /**
+     * This method is not supported for this writer.
+     *
+     * @throws UnsupportedOperationException when called.
+     */
     @Override
     public void writeVertex(final OutputStream outputStream, final Vertex v, Direction direction) throws IOException {
-        throw new UnsupportedOperationException("GraphML does not allow for a partial structure");
+        throw Io.Exceptions.writerFormatIsForFullGraphSerializationOnly(this.getClass());
     }
 
+    /**
+     * This method is not supported for this writer.
+     *
+     * @throws UnsupportedOperationException when called.
+     */
     @Override
     public void writeVertex(final OutputStream outputStream, final Vertex v) throws IOException {
-        throw new UnsupportedOperationException("GraphML does not allow for a partial structure");
+        throw Io.Exceptions.writerFormatIsForFullGraphSerializationOnly(this.getClass());
     }
 
+    /**
+     * This method is not supported for this writer.
+     *
+     * @throws UnsupportedOperationException when called.
+     */
     @Override
     public void writeEdge(final OutputStream outputStream, final Edge e) throws IOException {
-        throw new UnsupportedOperationException("GraphML does not allow for a partial structure");
+        throw Io.Exceptions.writerFormatIsForFullGraphSerializationOnly(this.getClass());
     }
 
+    /**
+     * This method is not supported for this writer.
+     *
+     * @throws UnsupportedOperationException when called.
+     */
     @Override
-    public void writeVertices(final OutputStream outputStream, Traversal<?, Vertex> traversal, final Direction direction) throws IOException {
-        throw new UnsupportedOperationException("GraphML does not allow for a partial structure");
+    public void writeVertices(final OutputStream outputStream, final Iterator<Vertex> vertexIterator, final Direction direction) throws IOException {
+        throw Io.Exceptions.writerFormatIsForFullGraphSerializationOnly(this.getClass());
     }
 
+    /**
+     * This method is not supported for this writer.
+     *
+     * @throws UnsupportedOperationException when called.
+     */
     @Override
-    public void writeVertices(final OutputStream outputStream, final Traversal<?, Vertex> traversal) throws IOException {
-        throw new UnsupportedOperationException("GraphML does not allow for a partial structure");
+    public void writeVertices(final OutputStream outputStream, final Iterator<Vertex> vertexIterator) throws IOException {
+        throw Io.Exceptions.writerFormatIsForFullGraphSerializationOnly(this.getClass());
+    }
+
+    /**
+     * This method is not supported for this writer.
+     *
+     * @throws UnsupportedOperationException when called.
+     */
+    @Override
+    public void writeVertexProperty(final OutputStream outputStream, final VertexProperty vp) throws IOException {
+        throw Io.Exceptions.writerFormatIsForFullGraphSerializationOnly(this.getClass());
+    }
+
+    /**
+     * This method is not supported for this writer.
+     *
+     * @throws UnsupportedOperationException when called.
+     */
+    @Override
+    public void writeProperty(final OutputStream outputStream, final Property p) throws IOException {
+        throw Io.Exceptions.writerFormatIsForFullGraphSerializationOnly(this.getClass());
+    }
+
+    /**
+     * This method is not supported for this writer.
+     *
+     * @throws UnsupportedOperationException when called.
+     */
+    @Override
+    public void writeObject(final OutputStream outputStream, final Object object) throws IOException {
+        throw Io.Exceptions.writerFormatIsForFullGraphSerializationOnly(this.getClass());
     }
 
     /**
@@ -374,7 +431,7 @@ public class GraphMLWriter implements GraphWriter {
         return new Builder();
     }
 
-    public static final class Builder {
+    public static final class Builder implements WriterBuilder<GraphMLWriter> {
         private boolean normalize = false;
         private Map<String, String> vertexKeyTypes = null;
         private Map<String, String> edgeKeyTypes = null;

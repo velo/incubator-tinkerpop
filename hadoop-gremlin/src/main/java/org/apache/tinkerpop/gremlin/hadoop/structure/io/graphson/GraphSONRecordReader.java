@@ -25,13 +25,14 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.LineRecordReader;
 import org.apache.tinkerpop.gremlin.hadoop.Constants;
 import org.apache.tinkerpop.gremlin.hadoop.structure.io.VertexWritable;
-import org.apache.tinkerpop.gremlin.structure.util.star.StarGraph;
 import org.apache.tinkerpop.gremlin.structure.Direction;
 import org.apache.tinkerpop.gremlin.structure.Edge;
 import org.apache.tinkerpop.gremlin.structure.Vertex;
 import org.apache.tinkerpop.gremlin.structure.io.graphson.GraphSONReader;
+import org.apache.tinkerpop.gremlin.structure.util.Attachable;
 import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedEdge;
 import org.apache.tinkerpop.gremlin.structure.util.detached.DetachedVertex;
+import org.apache.tinkerpop.gremlin.structure.util.star.StarGraph;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -64,11 +65,11 @@ public class GraphSONRecordReader extends RecordReader<NullWritable, VertexWrita
             return false;
 
         final StarGraph starGraph = StarGraph.open();
-        final Function<DetachedVertex, Vertex> vertexMaker = detachedVertex -> StarGraph.addTo(starGraph, detachedVertex);
-        final Function<DetachedEdge, Edge> edgeMaker = detachedEdge -> StarGraph.addTo(starGraph, detachedEdge);
+        final Function<Attachable<Vertex>, Vertex> vertexMaker = attachableVertex -> attachableVertex.attach(Attachable.Method.create(starGraph));
+        final Function<Attachable<Edge>, Edge> edgeMaker = attachableEdge -> attachableEdge.attach(Attachable.Method.create(starGraph));
         try (InputStream in = new ByteArrayInputStream(this.lineRecordReader.getCurrentValue().getBytes())) {
             this.vertexWritable.set(this.hasEdges ?
-                    this.graphsonReader.readVertex(in, Direction.BOTH, vertexMaker, edgeMaker) :
+                    this.graphsonReader.readVertex(in, vertexMaker, edgeMaker, Direction.BOTH) :
                     this.graphsonReader.readVertex(in, vertexMaker));
             return true;
         }

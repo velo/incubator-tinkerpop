@@ -23,15 +23,27 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.DefaultSerializerProvider;
+import org.apache.tinkerpop.gremlin.structure.Graph;
+import org.apache.tinkerpop.gremlin.structure.io.IoRegistry;
 import org.apache.tinkerpop.gremlin.structure.io.Mapper;
+import org.javatuples.Pair;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * An extension to the standard Jackson {@code ObjectMapper} which automatically registers the standard
- * {@link GraphSONModule} for serializing {@link org.apache.tinkerpop.gremlin.structure.Graph} elements.  This class
+ * {@link GraphSONModule} for serializing {@link Graph} elements.  This class
  * can be used for generalized JSON serialization tasks that require meeting GraphSON standards.
+ * <p/>
+ * {@link Graph} implementations providing an {@link IoRegistry} should register their {@code SimpleModule}
+ * implementations to it as follows:
+ * <pre>
+ * {@code
+ * IoRegistry registry = new IoRegistry();
+ * registry.register(GraphSONIo.class, null, new MySimpleModule());
+ * }
+ * </pre>
  *
  * @author Stephen Mallette (http://stephen.genoprime.com)
  */
@@ -63,7 +75,7 @@ public class GraphSONMapper implements Mapper<ObjectMapper> {
 
         // this provider toStrings all unknown classes and converts keys in Map objects that are Object to String.
         final DefaultSerializerProvider provider = new GraphSONSerializerProvider();
-        provider.setDefaultKeySerializer(new GraphSONModule.GraphSONKeySerializer());
+        provider.setDefaultKeySerializer(new GraphSONSerializers.GraphSONKeySerializer());
         om.setSerializerProvider(provider);
 
         om.registerModule(new GraphSONModule(normalize));
@@ -83,13 +95,20 @@ public class GraphSONMapper implements Mapper<ObjectMapper> {
         return new Builder();
     }
 
-    public static class Builder {
+    public static class Builder implements Mapper.Builder<Builder> {
         private List<SimpleModule> customModules = new ArrayList<>();
         private boolean loadCustomModules = false;
         private boolean normalize = false;
         private boolean embedTypes = false;
+        private IoRegistry registry = null;
 
         private Builder() {
+        }
+
+        @Override
+        public Builder addRegistry(final IoRegistry registry) {
+            this.registry = registry;
+            return this;
         }
 
         /**
@@ -126,6 +145,11 @@ public class GraphSONMapper implements Mapper<ObjectMapper> {
         }
 
         public GraphSONMapper create() {
+            if (registry != null) {
+                final List<Pair<Class, SimpleModule>> simpleModules = registry.find(GraphSONIo.class, SimpleModule.class);
+                simpleModules.stream().map(Pair::getValue1).forEach(this.customModules::add);
+            }
+
             return new GraphSONMapper(customModules, loadCustomModules, normalize, embedTypes);
         }
     }
