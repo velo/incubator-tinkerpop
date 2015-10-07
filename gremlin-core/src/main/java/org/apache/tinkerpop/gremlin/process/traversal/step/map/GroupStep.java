@@ -60,19 +60,29 @@ public final class GroupStep<S, K, V> extends ReducingBarrierStep<S, Map<K, V>> 
     private char state = 'k';
 
     private Traversal.Admin<S, K> keyTraversal = null;
-    private Traversal.Admin<S, ?> valueTraversal = this.integrateChild(__.identity().asAdmin());   // used in OLAP
-    private Traversal.Admin<?, V> reduceTraversal = this.integrateChild(__.fold().asAdmin());      // used in OLAP
-    private Traversal.Admin<S, V> valueReduceTraversal = this.integrateChild(__.fold().asAdmin()); // used in OLTP
+    private Traversal.Admin<S, ?> valueTraversal;       // used in OLAP
+    private Traversal.Admin<?, V> reduceTraversal;      // used in OLAP
+    private Traversal.Admin<S, V> valueReduceTraversal; // used in OLTP
+    private boolean groupCount = false;
 
-    public GroupStep(final Traversal.Admin traversal) {
+    public GroupStep(final Traversal.Admin traversal, final boolean groupCount) {
         super(traversal);
         this.setSeedSupplier((Supplier) new GroupStepHelper.GroupMapSupplier());
         this.setBiFunction(new GroupBiFunction(this));
+        if (this.groupCount = groupCount) {
+            this.valueReduceTraversal = this.integrateChild(__.count().asAdmin());
+            this.valueTraversal = this.integrateChild(__.identity().asAdmin());
+            this.reduceTraversal = this.integrateChild(__.count().asAdmin());
+        } else {
+            this.valueTraversal = this.integrateChild(__.identity().asAdmin());
+            this.reduceTraversal = this.integrateChild(__.fold().asAdmin());
+            this.valueReduceTraversal = this.integrateChild(__.fold().asAdmin());
+        }
     }
 
     @Override
-    public List<Traversal.Admin<?,?>> getLocalChildren() {
-        final List<Traversal.Admin<?,?>> children = new ArrayList<>(4);
+    public List<Traversal.Admin<?, ?>> getLocalChildren() {
+        final List<Traversal.Admin<?, ?>> children = new ArrayList<>(4);
         if (null != this.keyTraversal)
             children.add((Traversal.Admin) this.keyTraversal);
         children.add(this.valueReduceTraversal);
@@ -87,6 +97,8 @@ public final class GroupStep<S, K, V> extends ReducingBarrierStep<S, Map<K, V>> 
             this.keyTraversal = this.integrateChild(kvTraversal);
             this.state = 'v';
         } else if ('v' == this.state) {
+            if (this.groupCount)
+                throw new IllegalStateException("The key traversal for groupCount()-step have already been set: " + this);
             this.valueReduceTraversal = this.integrateChild(GroupStepHelper.convertValueTraversal(kvTraversal));
             final List<Traversal.Admin<?, ?>> splitTraversal = GroupStepHelper.splitOnBarrierStep(this.valueReduceTraversal);
             this.valueTraversal = this.integrateChild(splitTraversal.get(0));
@@ -100,6 +112,24 @@ public final class GroupStep<S, K, V> extends ReducingBarrierStep<S, Map<K, V>> 
     @Override
     public Set<TraverserRequirement> getRequirements() {
         return this.getSelfAndChildRequirements(TraverserRequirement.OBJECT);
+    }
+
+    @Override
+    public Traverser<Map<K, V>> processNextStart() {
+        if (this.byPass) {
+            final Traverser.Admin<S> traverser = this.starts.next();
+            final K key = TraversalUtil.applyNullable(traverser, this.keyTraversal);
+            this.valueTraversal.addStart(traverser);
+            final BulkSet<?> value = this.valueTraversal.toBulkSet();
+            return traverser.asAdmin().split(new Object[]{key, value}, (Step) this);
+        } else {
+            return super.processNextStart();
+        }
+    }
+
+    @Override
+    public MapReduce<K, Collection<?>, K, V, Map<K, V>> getMapReduce() {
+        return new GroupMapReduce<>(this);
     }
 
     @Override
@@ -118,25 +148,8 @@ public final class GroupStep<S, K, V> extends ReducingBarrierStep<S, Map<K, V>> 
     public int hashCode() {
         int result = this.valueReduceTraversal.hashCode();
         if (this.keyTraversal != null) result ^= this.keyTraversal.hashCode();
+        result ^= Boolean.valueOf(this.groupCount).hashCode();
         return result;
-    }
-
-    @Override
-    public MapReduce<K, Collection<?>, K, V, Map<K, V>> getMapReduce() {
-        return new GroupMapReduce<>(this);
-    }
-
-    @Override
-    public Traverser<Map<K, V>> processNextStart() {
-        if (this.byPass) {
-            final Traverser.Admin<S> traverser = this.starts.next();
-            final K key = TraversalUtil.applyNullable(traverser, this.keyTraversal);
-            this.valueTraversal.addStart(traverser);
-            final BulkSet<?> value = this.valueTraversal.toBulkSet();
-            return traverser.asAdmin().split(new Object[]{key, value}, (Step) this);
-        } else {
-            return super.processNextStart();
-        }
     }
 
     @Override

@@ -59,18 +59,39 @@ public final class GroupSideEffectStep<S, K, V> extends SideEffectStep<S> implem
 
     private char state = 'k';
     private Traversal.Admin<S, K> keyTraversal = null;
-    private Traversal.Admin<S, ?> valueTraversal = this.integrateChild(__.identity().asAdmin());   // used in OLAP
-    private Traversal.Admin<?, V> reduceTraversal = this.integrateChild(__.fold().asAdmin());      // used in OLAP
-    private Traversal.Admin<S, V> valueReduceTraversal = this.integrateChild(__.fold().asAdmin()); // used in OLTP
+    private Traversal.Admin<S, ?> valueTraversal;        // used in OLAP
+    private Traversal.Admin<?, V> reduceTraversal;       // used in OLAP
+    private Traversal.Admin<S, V> valueReduceTraversal;  // used in OLTP
     ///
     private String sideEffectKey;
+    private boolean groupCount = false;
     private boolean onGraphComputer = false;
     private GroupStepHelper.GroupMap<S, K, V> groupMap;
 
-    public GroupSideEffectStep(final Traversal.Admin traversal, final String sideEffectKey) {
+    public GroupSideEffectStep(final Traversal.Admin traversal, final String sideEffectKey, final boolean groupCount) {
         super(traversal);
         this.sideEffectKey = sideEffectKey;
         this.traversal.asAdmin().getSideEffects().registerSupplierIfAbsent(this.sideEffectKey, HashMapSupplier.instance());
+        if (this.groupCount = groupCount) {
+            this.valueReduceTraversal = this.integrateChild(__.count().asAdmin());
+            this.valueTraversal = this.integrateChild(__.identity().asAdmin());
+            this.reduceTraversal = this.integrateChild(__.count().asAdmin());
+        } else {
+            this.valueTraversal = this.integrateChild(__.identity().asAdmin());
+            this.reduceTraversal = this.integrateChild(__.fold().asAdmin());
+            this.valueReduceTraversal = this.integrateChild(__.fold().asAdmin());
+        }
+    }
+
+    @Override
+    public List<Traversal.Admin<?, ?>> getLocalChildren() {
+        final List<Traversal.Admin<?, ?>> children = new ArrayList<>(4);
+        if (null != this.keyTraversal)
+            children.add((Traversal.Admin) this.keyTraversal);
+        children.add(this.valueReduceTraversal);
+        children.add(this.valueTraversal);
+        children.add(this.reduceTraversal);
+        return children;
     }
 
     @Override
@@ -79,6 +100,8 @@ public final class GroupSideEffectStep<S, K, V> extends SideEffectStep<S> implem
             this.keyTraversal = this.integrateChild(kvTraversal);
             this.state = 'v';
         } else if ('v' == this.state) {
+            if (this.groupCount)
+                throw new IllegalStateException("The key traversal for groupCount()-step have already been set: " + this);
             this.valueReduceTraversal = this.integrateChild(GroupStepHelper.convertValueTraversal(kvTraversal));
             final List<Traversal.Admin<?, ?>> splitTraversal = GroupStepHelper.splitOnBarrierStep(this.valueReduceTraversal);
             this.valueTraversal = this.integrateChild(splitTraversal.get(0));
@@ -87,6 +110,11 @@ public final class GroupSideEffectStep<S, K, V> extends SideEffectStep<S> implem
         } else {
             throw new IllegalStateException("The key and value traversals for group()-step have already been set: " + this);
         }
+    }
+
+    @Override
+    public Set<TraverserRequirement> getRequirements() {
+        return this.getSelfAndChildRequirements(TraverserRequirement.OBJECT, TraverserRequirement.SIDE_EFFECTS);
     }
 
     @Override
@@ -106,6 +134,8 @@ public final class GroupSideEffectStep<S, K, V> extends SideEffectStep<S> implem
                 final Object object = traverser.sideEffects(this.sideEffectKey);
                 if (!(object instanceof GroupStepHelper.GroupMap))
                     traverser.sideEffects(this.sideEffectKey, this.groupMap = new GroupStepHelper.GroupMap<>((Map<K, V>) object));
+                else
+                    this.groupMap = (GroupStepHelper.GroupMap) object;
             }
             final K key = TraversalUtil.applyNullable(traverser, this.keyTraversal);
             Traversal.Admin<S, V> traversal = this.groupMap.get(key);
@@ -139,22 +169,6 @@ public final class GroupSideEffectStep<S, K, V> extends SideEffectStep<S> implem
     }
 
     @Override
-    public List<Traversal.Admin<?,?>> getLocalChildren() {
-        final List<Traversal.Admin<?,?>> children = new ArrayList<>(4);
-        if (null != this.keyTraversal)
-            children.add((Traversal.Admin) this.keyTraversal);
-        children.add(this.valueReduceTraversal);
-        children.add(this.valueTraversal);
-        children.add(this.reduceTraversal);
-        return children;
-    }
-
-    @Override
-    public Set<TraverserRequirement> getRequirements() {
-        return this.getSelfAndChildRequirements(TraverserRequirement.OBJECT, TraverserRequirement.SIDE_EFFECTS);
-    }
-
-    @Override
     public GroupSideEffectStep<S, K, V> clone() {
         final GroupSideEffectStep<S, K, V> clone = (GroupSideEffectStep<S, K, V>) super.clone();
         if (null != this.keyTraversal)
@@ -170,6 +184,7 @@ public final class GroupSideEffectStep<S, K, V> extends SideEffectStep<S> implem
         int result = super.hashCode() ^ this.sideEffectKey.hashCode();
         if (this.keyTraversal != null) result ^= this.keyTraversal.hashCode();
         result ^= this.valueReduceTraversal.hashCode();
+        result ^= Boolean.valueOf(this.groupCount).hashCode();
         return result;
     }
 

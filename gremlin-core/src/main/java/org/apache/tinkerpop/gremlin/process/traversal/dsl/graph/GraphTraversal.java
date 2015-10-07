@@ -72,7 +72,6 @@ import org.apache.tinkerpop.gremlin.process.traversal.step.map.DedupLocalStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.EdgeOtherVertexStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.EdgeVertexStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.FoldStep;
-import org.apache.tinkerpop.gremlin.process.traversal.step.map.GroupCountStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.GroupStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.GroupStepV3d0;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.IdStep;
@@ -111,7 +110,6 @@ import org.apache.tinkerpop.gremlin.process.traversal.step.map.UnfoldStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.map.VertexStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect.AddPropertyStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect.AggregateStep;
-import org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect.GroupCountSideEffectStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect.GroupSideEffectStep;
 import org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect.GroupSideEffectStepV3d0;
 import org.apache.tinkerpop.gremlin.process.traversal.step.sideEffect.IdentityStep;
@@ -627,7 +625,7 @@ public interface GraphTraversal<S, E> extends Traversal<S, E> {
     }
 
     public default <K, V> GraphTraversal<S, Map<K, V>> group() {
-        return this.asAdmin().addStep(new GroupStep<>(this.asAdmin()));
+        return this.asAdmin().addStep(new GroupStep<>(this.asAdmin(), false));
     }
 
     /**
@@ -639,7 +637,7 @@ public interface GraphTraversal<S, E> extends Traversal<S, E> {
     }
 
     public default <K> GraphTraversal<S, Map<K, Long>> groupCount() {
-        return this.asAdmin().addStep(new GroupCountStep<>(this.asAdmin()));
+        return this.asAdmin().addStep(new GroupStep<>(this.asAdmin(), true));
     }
 
     public default GraphTraversal<S, Tree> tree() {
@@ -966,7 +964,7 @@ public interface GraphTraversal<S, E> extends Traversal<S, E> {
     }
 
     public default GraphTraversal<S, E> group(final String sideEffectKey) {
-        return this.asAdmin().addStep(new GroupSideEffectStep<>(this.asAdmin(), sideEffectKey));
+        return this.asAdmin().addStep(new GroupSideEffectStep<>(this.asAdmin(), sideEffectKey, false));
     }
 
     /**
@@ -977,7 +975,7 @@ public interface GraphTraversal<S, E> extends Traversal<S, E> {
     }
 
     public default GraphTraversal<S, E> groupCount(final String sideEffectKey) {
-        return this.asAdmin().addStep(new GroupCountSideEffectStep<>(this.asAdmin(), sideEffectKey));
+        return this.asAdmin().addStep(new GroupSideEffectStep<>(this.asAdmin(), sideEffectKey, true));
     }
 
     public default GraphTraversal<S, E> tree(final String sideEffectKey) {
