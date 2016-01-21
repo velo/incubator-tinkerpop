@@ -1,5 +1,5 @@
 version: '{build}'
-skip_tags: true
+
 environment:
   matrix:
     - JAVA_HOME: C:\Program Files\Java\jdk1.8.0
